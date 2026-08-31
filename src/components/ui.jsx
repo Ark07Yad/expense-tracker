@@ -315,13 +315,22 @@ export function NumberInput({
  * everywhere else — including the currencies written after the amount, like the
  * euro in de-DE.
  *
- * `size` exists because this field appears in two quite different places. In
+ * `size` exists because this field appears in three quite different places. In
  * the composer and the investment sheets the amount *is* the screen, so it gets
  * the large treatment. In a settings form it sits in a grid beside ordinary
- * selects, and the large version would stand a head taller than its
- * neighbours — so 'md' matches the standard field metrics exactly.
+ * selects, and the large version would stand a head taller than its neighbours,
+ * so 'md' matches the standard field metrics exactly. 'sm' is for the dense
+ * budget column, where fourteen of these stack in a list.
+ *
+ * In that column the symbol pins left while the number stays right-aligned,
+ * which is what keeps a list of amounts scannable — the digits line up in a
+ * single column instead of drifting with the length of each number.
  */
 const MONEY_SIZES = {
+  sm: {
+    symbol: 'left-2.5 text-[11.5px]',
+    input: 'pl-7 pr-2.5 py-2 text-[13px] tabular',
+  },
   md: {
     symbol: 'left-3.5 text-[13px]',
     // pl-8 clears the symbol. Tailwind emits padding-left after the padding
@@ -335,7 +344,8 @@ const MONEY_SIZES = {
 };
 
 export function MoneyInput({
-  value, onChange, currency, size = 'lg', className = '', autoFocus, ...rest
+  value, onChange, currency, size = 'lg', className = '', inputClassName = '',
+  autoFocus, ...rest
 }) {
   const { state } = useStore();
   const code = currency || state.profile.currency;
@@ -356,7 +366,7 @@ export function MoneyInput({
         allowEmpty
         autoFocus={autoFocus}
         placeholder="0"
-        className={metrics.input}
+        className={`${metrics.input} ${inputClassName}`}
         {...rest}
       />
     </div>

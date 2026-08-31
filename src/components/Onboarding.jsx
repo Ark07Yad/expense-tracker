@@ -236,11 +236,12 @@ export default function Onboarding() {
                       </span>
                       <span className="text-[13px] flex-1 truncate">{c.label}</span>
                       <div className="w-28 shrink-0">
-                        <NumberInput
+                        <MoneyInput
+                          size="sm"
+                          inputClassName="text-right"
+                          currency={profile.currency}
                           value={profile.budgets[c.id]}
                           onChange={(v) => patch({ budgets: { ...profile.budgets, [c.id]: v } })}
-                          min={0}
-                          className="text-right py-2 text-[13px]"
                         />
                       </div>
                     </div>

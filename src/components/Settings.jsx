@@ -220,13 +220,12 @@ export default function Settings({ toast }) {
                   <Badge tone="neutral" className="hidden sm:inline-flex">no cap</Badge>
                 )}
                 <div className="w-32 shrink-0">
-                  <NumberInput
+                  <MoneyInput
+                    size="sm"
+                    inputClassName="text-right"
                     value={value ?? null}
                     onChange={(v) => dispatch({ type: 'budget', category: c.id, amount: v })}
-                    min={0}
-                    allowEmpty
                     placeholder="—"
-                    className="text-right py-2 text-[13px]"
                   />
                 </div>
               </div>
