@@ -314,14 +314,39 @@ export function NumberInput({
  * being kept in a table, so it always matches what the same locale prints
  * everywhere else — including the currencies written after the amount, like the
  * euro in de-DE.
+ *
+ * `size` exists because this field appears in two quite different places. In
+ * the composer and the investment sheets the amount *is* the screen, so it gets
+ * the large treatment. In a settings form it sits in a grid beside ordinary
+ * selects, and the large version would stand a head taller than its
+ * neighbours — so 'md' matches the standard field metrics exactly.
  */
-export function MoneyInput({ value, onChange, currency, className = '', autoFocus, ...rest }) {
+const MONEY_SIZES = {
+  md: {
+    symbol: 'left-3.5 text-[13px]',
+    // pl-8 clears the symbol. Tailwind emits padding-left after the padding
+    // shorthand, so this wins over inputBase's px-3.5 regardless of class order.
+    input: 'pl-8 tabular',
+  },
+  lg: {
+    symbol: 'left-4 text-[15px]',
+    input: 'pl-9 text-[17px] font-semibold tabular py-3',
+  },
+};
+
+export function MoneyInput({
+  value, onChange, currency, size = 'lg', className = '', autoFocus, ...rest
+}) {
   const { state } = useStore();
   const code = currency || state.profile.currency;
   const symbol = formatMoney(0, code, { decimals: 0 }).replace(/[\d\s.,]/g, '') || '$';
+  const metrics = MONEY_SIZES[size] || MONEY_SIZES.lg;
+
   return (
     <div className={`relative ${className}`}>
-      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dim text-[15px] font-medium pointer-events-none">
+      <span
+        className={`absolute top-1/2 -translate-y-1/2 text-dim font-medium pointer-events-none ${metrics.symbol}`}
+      >
         {symbol}
       </span>
       <NumberInput
@@ -331,7 +356,7 @@ export function MoneyInput({ value, onChange, currency, className = '', autoFocu
         allowEmpty
         autoFocus={autoFocus}
         placeholder="0"
-        className="pl-9 text-[17px] font-semibold tabular py-3"
+        className={metrics.input}
         {...rest}
       />
     </div>

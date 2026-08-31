@@ -14,7 +14,7 @@ import { formatMoney, formatPercent } from '../lib/calc';
 import * as persist from '../lib/persist';
 import {
   Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money,
-  NumberInput, SectionTitle, Select, Sheet,
+  MoneyInput, NumberInput, SectionTitle, Select, Sheet,
 } from './ui';
 
 export default function Settings({ toast }) {
@@ -116,12 +116,10 @@ export default function Settings({ toast }) {
             </Select>
           </Field>
           <Field label="Monthly take-home" hint="Used to size budgets and the savings rate.">
-            <NumberInput
+            <MoneyInput
+              size="md"
               value={state.profile.monthlyIncome}
               onChange={(v) => setProfile({ monthlyIncome: v })}
-              min={0}
-              allowEmpty
-              placeholder="0"
             />
           </Field>
         </div>
