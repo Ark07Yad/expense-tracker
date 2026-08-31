@@ -302,10 +302,23 @@ export function NumberInput({
   );
 }
 
-/** The amount field, with the currency symbol built into the control. */
-export function MoneyInput({ value, onChange, className = '', autoFocus, ...rest }) {
+/**
+ * The amount field, with the currency symbol built into the control.
+ *
+ * `currency` overrides the stored one. Onboarding needs that: the currency the
+ * user picks on the first step lives in local state until the profile is
+ * committed at the end, so a field reading the store would keep showing the
+ * default rupee sign while the rest of that screen had already switched.
+ *
+ * The symbol is derived by formatting zero and stripping the digits rather than
+ * being kept in a table, so it always matches what the same locale prints
+ * everywhere else — including the currencies written after the amount, like the
+ * euro in de-DE.
+ */
+export function MoneyInput({ value, onChange, currency, className = '', autoFocus, ...rest }) {
   const { state } = useStore();
-  const symbol = formatMoney(0, state.profile.currency, { decimals: 0 }).replace(/[\d\s.,]/g, '') || '$';
+  const code = currency || state.profile.currency;
+  const symbol = formatMoney(0, code, { decimals: 0 }).replace(/[\d\s.,]/g, '') || '$';
   return (
     <div className={`relative ${className}`}>
       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-dim text-[15px] font-medium pointer-events-none">

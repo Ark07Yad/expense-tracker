@@ -154,7 +154,12 @@ export default function Onboarding() {
               </p>
 
               <Field label="Monthly take-home" className="mt-6">
-                <MoneyInput value={profile.monthlyIncome} onChange={(v) => patch({ monthlyIncome: v })} autoFocus />
+                <MoneyInput
+                  value={profile.monthlyIncome}
+                  onChange={(v) => patch({ monthlyIncome: v })}
+                  currency={profile.currency}
+                  autoFocus
+                />
               </Field>
 
               <Field
