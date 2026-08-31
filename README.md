@@ -1,5 +1,7 @@
 # CoinTrack
 
+**Live: <https://cointrack.ark07yad.workers.dev>**
+
 A local-first expense tracker. Log what you earn, spend and save; see it by week,
 month, quarter and year; keep a running figure for what your investments are
 worth; and get plain, numeric suggestions about the parts that need attention.
@@ -12,8 +14,8 @@ sent anywhere.
 npm install && npm run dev
 ```
 
-Then open <http://localhost:5181>. `npm run build` produces a static `dist/` that
-can be dropped on any host; `npm run lint` runs oxlint.
+Then open <http://localhost:5181>. `npm run build` produces a static `dist/`;
+`npm run lint` runs oxlint.
 
 On first run you can either set up a profile or load five months of generated
 sample data — the sample set is seeded, so it comes out the same every time, and
@@ -90,6 +92,39 @@ The investments section describes the holdings you have recorded: how large, how
 concentrated, how current the figures are, whether contributions are being
 logged. It does not value anything for you, it has no price feed, and it will not
 tell you what to buy, sell or hold.
+
+## Deployment
+
+Hosted on Cloudflare as a static-assets Worker, which is the recommended path
+for new projects in place of Pages. It fits inside the free plan comfortably:
+the app is entirely client-side, so the Worker only executes on a cache miss for
+a client route or a 404 — every real page load is served straight from
+Cloudflare's asset server.
+
+```bash
+npm run deploy          # build, generate dist/_headers, wrangler deploy
+```
+
+Two details are load-bearing:
+
+**`not_found_handling = "none"`, with the SPA fallback done by hand.** The
+built-in single-page-application mode answers *every* miss with index.html and a
+200, including a hashed bundle that is genuinely missing — which happens for
+real when a client holding the previous index.html requests an asset that a
+deploy has just replaced. The browser then reports a MIME-type error that says
+nothing about the actual problem. `worker-entry.js` separates the two: a real
+404 for a missing asset, the app shell for a client route.
+
+**Security headers are written twice, from one module.** Cloudflare's asset
+server answers requests matching a built file *without* invoking the Worker, so
+headers set only in the Worker would cover 404s and nothing a visitor actually
+loads. `scripts/gen-headers.mjs` writes `dist/_headers` at build time and
+`worker-entry.js` applies the same set to what it still handles; both import
+`security-headers.js`, so they cannot drift.
+
+The policy is strict — `script-src 'self'`, `connect-src 'self'`, no framing.
+The app keeps a complete personal financial history in IndexedDB, and refusing
+to run anything but its own bundle is what makes that hard to read.
 
 ## Licence
 

@@ -1,0 +1,25 @@
+# Deployment — a static-assets Worker, which is Cloudflare's recommended path
+# for new projects in place of Pages. Everything here fits inside the free plan:
+# the app is entirely client-side, so the Worker only runs on a cache miss for a
+# client route or a 404.
+#
+#   npm run build
+#   npm run deploy
+
+name = "cointrack"
+main = "worker-entry.js"
+compatibility_date = "2026-08-30"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# "none" makes a miss a real 404, which worker-entry.js then turns into either
+# a clean 404 (missing asset) or the app shell (client route). The built-in
+# single-page-application mode cannot tell those apart and answers both with
+# index.html and a 200 — which is how a missing bundle becomes an unrelated
+# MIME-type error in the console.
+not_found_handling = "none"
+
+[observability]
+enabled = true
