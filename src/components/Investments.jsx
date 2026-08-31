@@ -12,7 +12,7 @@
  * return.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
@@ -283,29 +283,32 @@ export default function Investments({ toast }) {
 
 /* ────────────────────────────  Add / edit holding  ──────────────────────── */
 
+const blankAsset = () => ({ name: '', class: 'fund', note: '', contributed: null, value: null });
+
 function AssetSheet({ open, editing, onClose, onSaved }) {
   const { dispatch } = useStore();
-  const [draft, setDraft] = useState({ name: '', class: 'fund', note: '', contributed: null, value: null });
+  const [draft, setDraft] = useState(blankAsset);
   const [error, setError] = useState('');
 
-  const seeded = useMemo(
-    () =>
+  /*
+   * Re-seed every time the sheet opens.
+   *
+   * This used to compare an `open`-derived key during render, which never
+   * reset while the sheet was closed: reopening the *same* holding matched the
+   * previous key and skipped the seed, so a cancelled edit stayed in the form.
+   * The discarded text was then one Save away from being committed — the sheet
+   * showed a name the holding did not have. Keying on the open transition
+   * itself is what makes cancel actually mean cancel.
+   */
+  useEffect(() => {
+    if (!open) return;
+    setDraft(
       editing
         ? { name: editing.name, class: editing.class, note: editing.note || '', contributed: null, value: null }
-        : { name: '', class: 'fund', note: '', contributed: null, value: null },
-    [editing]
-  );
-
-  // `key` on the Sheet children would be cleaner, but the sheet is unmounted
-  // when closed anyway — re-seeding on open is enough and avoids a second
-  // render pass.
-  const [seedKey, setSeedKey] = useState('');
-  const openKey = `${open}-${editing?.id || 'new'}`;
-  if (open && seedKey !== openKey) {
-    setSeedKey(openKey);
-    setDraft(seeded);
+        : blankAsset()
+    );
     setError('');
-  }
+  }, [open, editing]);
 
   const patch = (p) => setDraft((d) => ({ ...d, ...p }));
 
@@ -420,11 +423,21 @@ function MonthlyUpdateSheet({ open, onClose, assets, defaultMonth, onSaved }) {
   const cur = state.profile.currency;
   const [month, setMonth] = useState(defaultMonth);
   const [draft, setDraft] = useState({});
-  const [seedKey, setSeedKey] = useState('');
 
-  const openKey = `${open}-${month}`;
-  if (open && seedKey !== openKey) {
-    setSeedKey(openKey);
+  /*
+   * Re-seed on open, and whenever the month is changed while open.
+   *
+   * Same fix as AssetSheet: the previous render-time key never reset on close,
+   * so reopening on the same month restored whatever had been typed and
+   * abandoned last time.
+   *
+   * `assets` and `state.assets` are deliberately not dependencies. They change
+   * identity on any state update, and re-seeding from them mid-edit would wipe
+   * figures the user is in the middle of typing. The effect closes over the
+   * values from the render that opened the sheet, which are the current ones.
+   */
+  useEffect(() => {
+    if (!open) return;
     const next = {};
     for (const a of assets) {
       const existing = state.assets.find((x) => x.id === a.id)?.history?.[month];
@@ -434,7 +447,8 @@ function MonthlyUpdateSheet({ open, onClose, assets, defaultMonth, onSaved }) {
       };
     }
     setDraft(next);
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, month]);
 
   const months = useMemo(
     () => Array.from({ length: 13 }, (_, i) => addMonthKeys(defaultMonth, -i)),

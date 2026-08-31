@@ -35,9 +35,6 @@ export const SECTIONS = [
   { id: 'investing', label: 'Investments',   icon: 'chart',     blurb: 'What your holdings look like' },
 ];
 
-export const sectionById = (id) =>
-  SECTIONS.find((s) => s.id === id) || { id, label: categoryById(id).label, icon: categoryById(id).icon };
-
 const RANK = { bad: 0, warn: 1, info: 2, good: 3 };
 
 /* ────────────────────────────────  Helpers  ─────────────────────────────── */

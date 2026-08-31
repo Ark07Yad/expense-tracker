@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, suggestBudgets } from '../lib/store';
 import { CURRENCIES, categoriesFor } from '../lib/data';
 import { buildDemo } from '../lib/demo';
-import { formatMoney, formatPercent } from '../lib/calc';
+import { formatMoney, formatPercent, todayKey } from '../lib/calc';
 import * as persist from '../lib/persist';
 import {
   Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money,
@@ -39,15 +39,36 @@ export default function Settings({ toast }) {
 
   const setProfile = (patch) => dispatch({ type: 'profile', patch });
 
-  const exportData = async () => {
+  /**
+   * Download a backup.
+   *
+   * Two details matter more here than they look, because with no server this
+   * file is the only copy of the data that can leave the device — a download
+   * that silently does nothing is the worst failure this app has.
+   *
+   * The anchor is put in the document before it is clicked: a detached anchor
+   * works in Chrome but has historically been ignored by Firefox, which would
+   * mean the button appearing to work and producing no file.
+   *
+   * The object URL is revoked on a timer rather than on the next line. Revoking
+   * it immediately races the browser's own read of the blob; Chrome usually
+   * wins that race, others do not, and losing it produces an empty or failed
+   * download.
+   */
+  const exportData = () => {
     const payload = { app: 'cointrack', version: state.version, exportedAt: new Date().toISOString(), state };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cointrack-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `cointrack-${todayKey()}.json`;
+    a.style.display = 'none';
+    document.body.append(a);
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 5000);
     toast?.('Backup downloaded');
   };
 
@@ -296,10 +317,20 @@ export default function Settings({ toast }) {
             <ConfirmButton
               label="Erase everything"
               confirmLabel="Yes, erase it"
-              onConfirm={async () => {
-                await persist.clearAll();
+              onConfirm={() => {
+                /*
+                 * Reset the app first, clean storage behind it.
+                 *
+                 * This used to await clearAll() before resetting. If the
+                 * IndexedDB side stalled, the erase stopped half-done: the
+                 * localStorage mirror was gone, but the dialog stayed open and
+                 * every screen still showed the data the user had just
+                 * confirmed deleting. Nothing the user sees should depend on a
+                 * storage promise settling.
+                 */
                 dispatch({ type: 'reset' });
                 setResetOpen(false);
+                persist.clearAll();
               }}
             />
           </div>

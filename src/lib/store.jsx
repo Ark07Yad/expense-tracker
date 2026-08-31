@@ -7,7 +7,7 @@
  * and asks the browser not to evict either.
  */
 
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
 import { categoriesFor } from './data';
 import { monthKey, todayKey } from './calc';
 import * as persist from './persist';
@@ -254,7 +254,6 @@ export function StoreProvider({ children }) {
   // The synchronous mirror is read during the very first render so a returning
   // user never sees an empty app flash before IndexedDB resolves.
   const [state, dispatch] = useReducer(reducer, undefined, () => hydrate(persist.loadSync()));
-  const hydrated = useRef(false);
 
   // Authoritative read: whichever backend holds the newer copy wins. Skipped if
   // the user has already started typing, so a slow IDB read cannot clobber
@@ -262,13 +261,12 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     persist.load().then((stored) => {
-      if (cancelled || !stored) {
-        hydrated.current = true;
-        return;
-      }
+      if (cancelled || !stored) return;
+      // Re-reading the mirror here rather than trusting the one from mount is
+      // what stops a slow IndexedDB read from clobbering edits made in the
+      // meantime: by now the mirror carries them and is the newer copy.
       const mirrorAt = persist.loadSync()?.savedAt || 0;
       if ((stored.savedAt || 0) > mirrorAt) dispatch({ type: 'replace', state: stored });
-      hydrated.current = true;
     });
     return () => {
       cancelled = true;
@@ -343,9 +341,4 @@ export function suggestBudgets(monthlyIncome, savingsTargetPct = 20) {
     out[c.id] = Math.max(step, Math.round(raw / step) * step);
   }
   return out;
-}
-
-export async function exportState(state) {
-  const payload = { app: 'cointrack', version: state.version, exportedAt: Date.now(), state };
-  return new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
 }

@@ -30,18 +30,41 @@ const MAX_SNAPSHOTS = 7;
 
 let dbPromise = null;
 
+/**
+ * `open` can hang forever, and nothing above here expects that.
+ *
+ * An IndexedDB open request is not guaranteed to fire any of its events. The
+ * usual cause is a `deleteDatabase` or a version change queued behind a live
+ * connection: the delete waits for the connection to close, and every later
+ * open waits behind the delete. No error is raised — the request simply never
+ * settles, and every read and write that awaits it stalls with it for the rest
+ * of the session.
+ *
+ * The timeout turns that into an ordinary failure, which the callers already
+ * handle by falling back to the localStorage mirror. A degraded backend is
+ * recoverable; a promise that never settles is not.
+ */
+const OPEN_TIMEOUT_MS = 5000;
+
 function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB unavailable'));
+
+    const timer = setTimeout(() => reject(new Error('IndexedDB open timed out')), OPEN_TIMEOUT_MS);
+    const settle = (fn) => (arg) => {
+      clearTimeout(timer);
+      fn(arg);
+    };
+
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('IndexedDB blocked'));
+    req.onsuccess = settle(() => resolve(req.result));
+    req.onerror = settle(() => reject(req.error));
+    req.onblocked = settle(() => reject(new Error('IndexedDB blocked')));
   }).catch((e) => {
     dbPromise = null;
     throw e;
@@ -226,12 +249,26 @@ export async function restoreSnapshot(day) {
   return list.find((s) => s.day === day)?.state ?? null;
 }
 
+/**
+ * Wipe both backends.
+ *
+ * Bounded, and it never rejects. The mirror is removed synchronously first, so
+ * the important half of the erase has already happened by the time IndexedDB is
+ * asked for anything — if that side is wedged, the caller still gets a resolved
+ * promise instead of waiting on a request that may never settle.
+ */
 export async function clearAll() {
   try {
     localStorage.removeItem(LS_KEY);
   } catch { /* ignore */ }
+
   try {
-    await idbSet(STATE_KEY, undefined);
-    await idbSet(SNAPSHOT_KEY, []);
-  } catch { /* ignore */ }
+    await Promise.race([
+      (async () => {
+        await idbSet(STATE_KEY, undefined);
+        await idbSet(SNAPSHOT_KEY, []);
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('clear timed out')), 4000)),
+    ]);
+  } catch { /* ignore — the mirror is already gone and the UI must not stall */ }
 }
