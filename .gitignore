@@ -6,3 +6,6 @@ dist
 .env.local
 .vite
 .wrangler
+
+# Local working notes — deliberately not published
+PROJECT.md
