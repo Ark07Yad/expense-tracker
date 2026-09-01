@@ -168,12 +168,21 @@ themselves through a live region.
 npm test
 ```
 
-192 tests over the pure engines — dates and period boundaries, aggregation,
-schedules, goals, CSV parsing, and the advisor's rules. They lean on properties rather than golden
+253 tests. The engines run in node — dates and period boundaries, aggregation,
+schedules, goals, CSV parsing, the advisor's rules and a performance budget.
+Component tests opt into jsdom with a per-file docblock, so a unit test never
+pays for a document it does not use. They lean on properties rather than golden
 values where they can: the chart buckets must sum to the headline the screen
 prints, a category that vanished must still count as a movement, and a holding
 nobody revalued must not drag net worth to zero. The advisor suite also pins the
 boundary in the next section, so it cannot be eroded by accident.
+
+The component tests deliberately cover the behaviours that fail *silently*: a
+focus trap that has stopped trapping looks identical to one that works unless
+you are using a keyboard; a shortcut that fires while you are typing loses the
+entry you were writing; a form that shows a goal selected and saves without it
+looks correct until you check the number weeks later. Several are regressions
+that actually happened here, kept as tests so they cannot happen twice.
 
 ## What the advisor does and does not do
 

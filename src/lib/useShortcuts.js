@@ -10,16 +10,25 @@
 
 import { useEffect } from 'react';
 
-/** True when the key should be left entirely to whatever has focus. */
+/**
+ * True when the key should be left entirely to whatever has focus.
+ *
+ * The editable check reads the attribute as well as the property. `contentEditable`
+ * is inherited, so the event target can be a child of the editable host rather
+ * than the host itself, and the computed property is not implemented
+ * everywhere — including in test environments, where relying on it alone means
+ * the most important case in this file cannot be covered at all.
+ */
 function typingInto(target) {
   if (!target) return false;
+
   const tag = target.tagName;
-  return (
-    tag === 'INPUT' ||
-    tag === 'TEXTAREA' ||
-    tag === 'SELECT' ||
-    target.isContentEditable === true
-  );
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable === true) return true;
+
+  return typeof target.closest === 'function'
+    ? target.closest('[contenteditable]:not([contenteditable="false"])') !== null
+    : false;
 }
 
 export function useShortcuts(handlers, { enabled = true } = {}) {

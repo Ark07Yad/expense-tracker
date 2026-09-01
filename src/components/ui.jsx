@@ -637,8 +637,26 @@ export function Bar({
 /* ─────────────────────────────  Sheet / modal  ─────────────────────────── */
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
-  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+  'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Can this element actually take focus?
+ *
+ * Not `offsetParent !== null`, which is the usual shorthand and wrong twice
+ * over: it reports null for anything inside a `position: fixed` ancestor even
+ * when plainly visible, and it depends on layout, so under a test renderer with
+ * no layout engine *every* element looks hidden and the trap silently becomes a
+ * no-op. Asking about display and visibility answers the actual question, and
+ * degrades to "everything is visible" rather than "nothing is" when there are
+ * no stylesheets.
+ */
+function isVisible(el) {
+  if (el.hasAttribute('hidden') || el.closest('[aria-hidden="true"]')) return false;
+  const style = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
+  if (!style) return true;
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
 
 export function Sheet({ open, onClose, title, subtitle, children, footer, size = 'md' }) {
   const panel = useRef(null);
@@ -666,9 +684,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
       }
       if (e.key !== 'Tab') return;
 
-      const items = [...(panel.current?.querySelectorAll(FOCUSABLE) || [])].filter(
-        (el) => el.offsetParent !== null
-      );
+      const items = [...(panel.current?.querySelectorAll(FOCUSABLE) || [])].filter(isVisible);
       if (!items.length) return;
 
       const first = items[0];
@@ -688,15 +704,25 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
 
-    // Move focus into the sheet, preferring a field the user is meant to fill.
-    const id = requestAnimationFrame(() => {
-      const auto = panel.current?.querySelector('[autofocus]');
-      const first = panel.current?.querySelector(FOCUSABLE);
-      (auto || first)?.focus();
-    });
+    /*
+     * Move focus into the sheet — unless something in it already has focus.
+     *
+     * React's `autoFocus` prop leaves no `autofocus` attribute behind; it calls
+     * focus() during commit, before this effect. So a sheet whose amount field
+     * asked for focus must not have it taken away again, and checking whether
+     * the panel already owns focus is what distinguishes the two cases.
+     *
+     * Done synchronously rather than in a requestAnimationFrame. The DOM is
+     * already mounted by the time an effect runs, so the frame bought nothing —
+     * and rAF does not fire at all in a hidden tab, which meant a sheet opened
+     * in a background tab came up with focus stranded on the body.
+     */
+    if (!panel.current?.contains(document.activeElement)) {
+      const items = [...(panel.current?.querySelectorAll(FOCUSABLE) || [])].filter(isVisible);
+      items[0]?.focus();
+    }
 
     return () => {
-      cancelAnimationFrame(id);
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
       // Back where they were, so closing a sheet does not dump focus at the

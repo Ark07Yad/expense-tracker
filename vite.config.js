@@ -4,6 +4,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Test files are transformed outside the React plugin's usual path, where the
+  // default is the classic runtime — which needs React in scope and fails with
+  // "React is not defined". The app's own files are unaffected either way.
+  esbuild: { jsx: 'automatic', jsxImportSource: 'react' },
   server: { port: 5181 },
   build: {
     rollupOptions: {
@@ -25,10 +29,24 @@ export default defineConfig({
     },
   },
   test: {
-    // The suite covers the pure engines — dates, aggregation, rules — which
-    // need no DOM. Anything that does would be a component test, and those
-    // are better served by driving the real app.
+    /*
+     * Two kinds of test in one suite.
+     *
+     * The engines are pure and run in node — no DOM, and fast enough that the
+     * whole set finishes in under half a second. Component tests need jsdom,
+     * and opt in per file with a `@vitest-environment jsdom` docblock rather
+     * than paying for a document in every unit test.
+     */
     environment: 'node',
-    include: ['src/**/*.test.js'],
+    include: ['src/**/*.test.{js,jsx}'],
+    setupFiles: ['src/test/setup.js'],
+    restoreMocks: true,
+    environmentOptions: {
+      // jsdom only provides localStorage for a real origin. Left at the
+      // default the document has an opaque one, `localStorage` is undefined,
+      // and every component test fails on hydration rather than on anything
+      // it meant to check.
+      jsdom: { url: 'http://localhost:5181' },
+    },
   },
 });
