@@ -11,6 +11,7 @@ import { useStore, suggestBudgets } from '../lib/store';
 import { CURRENCIES, categoriesFor } from '../lib/data';
 import { buildDemo } from '../lib/demo';
 import { formatMoney, formatPercent, todayKey } from '../lib/calc';
+import { formatBytes } from '../lib/attachments';
 import * as persist from '../lib/persist';
 import ImportSheet from './ImportSheet';
 import {
@@ -23,11 +24,13 @@ export default function Settings({ toast }) {
   const cur = state.profile.currency;
   const fileRef = useRef(null);
   const [storage, setStorage] = useState(null);
+  const [files, setFiles] = useState(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
 
   useEffect(() => {
     persist.storageStatus().then(setStorage);
+    persist.fileUsage().then(setFiles);
   }, [state.entries.length]);
 
   const budgets = state.profile.budgets;
@@ -263,7 +266,7 @@ export default function Settings({ toast }) {
           Your data
         </SectionTitle>
 
-        <div className="grid sm:grid-cols-3 gap-2.5 mb-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
           <div className="surface rounded-2xl p-3.5">
             <div className="text-[10.5px] uppercase tracking-wider text-faint">Entries</div>
             <div className="text-[20px] font-semibold display mt-1">{state.entries.length}</div>
@@ -271,6 +274,11 @@ export default function Settings({ toast }) {
           <div className="surface rounded-2xl p-3.5">
             <div className="text-[10.5px] uppercase tracking-wider text-faint">Holdings</div>
             <div className="text-[20px] font-semibold display mt-1">{state.assets.length}</div>
+          </div>
+          <div className="surface rounded-2xl p-3.5">
+            <div className="text-[10.5px] uppercase tracking-wider text-faint">Receipts</div>
+            <div className="text-[20px] font-semibold display mt-1">{files?.count ?? '—'}</div>
+            <div className="text-[11px] text-faint mt-0.5">{formatBytes(files?.bytes || 0)}</div>
           </div>
           <div className="surface rounded-2xl p-3.5">
             <div className="text-[10.5px] uppercase tracking-wider text-faint">Storage</div>
@@ -307,7 +315,9 @@ export default function Settings({ toast }) {
 
         <p className="text-[11.5px] text-faint mt-3 leading-relaxed">
           Loading sample data replaces every entry and holding you currently have. Export first if you want to
-          keep them.
+          keep them. A backup carries your entries, holdings, schedules and goals — but not attached receipts,
+          which stay on this device only: putting image bytes into the JSON would multiply its size for files
+          you already have the originals of.
         </p>
       </Card>
 

@@ -425,6 +425,42 @@ function monthsApart(a, b) {
   return (by - ay) * 12 + (bm - am);
 }
 
+/* ──────────────────────────────  Memoisation  ────────────────────────────── */
+
+/**
+ * Cache derived values against the identity of the state they came from.
+ *
+ * State is replaced wholesale on every change, so object identity *is* data
+ * identity — if the same state object is handed back, every derivation from it
+ * is still valid. A WeakMap means a superseded state takes its cache with it
+ * when it is collected, with nothing to invalidate by hand.
+ *
+ * This exists for the advisor. It asks for the same month, the same previous
+ * month and the same six-month history once per section, and the dashboard asks
+ * it for four sections on every render — measured at 28ms with two years of
+ * entries, which is two dropped frames on the render path for work that was
+ * already done.
+ */
+const derived = new WeakMap();
+
+export function memoByState(state, key, compute) {
+  let bucket = derived.get(state);
+  if (!bucket) {
+    bucket = new Map();
+    derived.set(state, bucket);
+  }
+  if (!bucket.has(key)) bucket.set(key, compute());
+  return bucket.get(key);
+}
+
+/** Memoised `computeFinance` for the common unfiltered case. */
+export const financeFor = (state, period, offset) =>
+  memoByState(state, `f:${period}:${offset}`, () => computeFinance(state, period, offset));
+
+/** Memoised `computeInvestments`. */
+export const investmentsFor = (state, months = 12) =>
+  memoByState(state, `i:${months}`, () => computeInvestments(state, months));
+
 /* ─────────────────────────────────  Hooks  ───────────────────────────────── */
 
 export function useFinance(period, offset = 0, categoryFilter = null) {

@@ -25,6 +25,10 @@
  * network requests: no backend, no analytics, no price feed. If a future
  * version talks to anything, it has to be listed here or the call fails
  * silently in the console rather than visibly in the UI.
+ *
+ * `worker-src` and `manifest-src` are what let the offline shell install at
+ * all — without them the service worker registration and the install prompt
+ * both fail with a console error and no visible symptom.
  */
 export function securityHeaders() {
   return {
@@ -38,6 +42,9 @@ export function securityHeaders() {
       // data: for the inline SVG favicon, blob: for the JSON backup export.
       "img-src 'self' data: blob:",
       "connect-src 'self'",
+      // The offline shell in public/sw.js, and the install manifest.
+      "worker-src 'self'",
+      "manifest-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",          // stops an injected <base> retargeting URLs
       "form-action 'self'",

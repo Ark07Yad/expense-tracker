@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildSuggestions, headlineSuggestions, liveSuggestions } from './insights';
+import { SECTIONS, buildSuggestions, headlineSuggestions, liveSuggestions } from './insights';
 import { addMonthKeys, monthKey, todayKey } from './calc';
 
 let seq = 0;
@@ -30,6 +30,46 @@ const state = (over = {}) => ({
 
 /** A day inside the current month, so month-scoped rules see the fixture. */
 const thisMonth = (day) => `${monthKey(todayKey())}-${String(day).padStart(2, '0')}`;
+
+describe('every section runs', () => {
+  // A smoke test across all of them, because a section nothing calls is a
+  // section where a bad reference sits until a user finds it. This caught
+  // exactly that: `computeInvestments` left behind after an import change,
+  // reachable only from the savings and income sections.
+  const populated = state({
+    profile: { monthlyIncome: 5000, budgets: { dining: 400, housing: 1500 } },
+    entries: [
+      entry(thisMonth(1), 'earning', 'salary', 5000),
+      entry(thisMonth(2), 'expense', 'housing', 1500),
+      entry(thisMonth(3), 'expense', 'dining', 500),
+      entry(thisMonth(4), 'saving', 'emergency', 400),
+    ],
+    assets: [{
+      id: 'fd', name: 'Fixed deposit', class: 'bond', note: '', createdAt: 1,
+      history: { [monthKey(todayKey())]: { contributed: 100, value: 9000 } },
+    }],
+  });
+
+  for (const section of SECTIONS) {
+    it(`${section.id} produces usable suggestions`, () => {
+      const out = buildSuggestions(populated, section.id);
+      expect(Array.isArray(out)).toBe(true);
+      for (const s of out) {
+        expect(s.id, `${section.id} suggestion needs an id`).toBeTruthy();
+        expect(s.title, `${s.id} needs a title`).toBeTruthy();
+        expect(s.body, `${s.id} needs a body`).toBeTruthy();
+        expect(['bad', 'warn', 'info', 'good']).toContain(s.tone);
+        expect(typeof s.priority).toBe('number');
+      }
+    });
+  }
+
+  it('runs a category deep dive for every expense category', () => {
+    for (const id of ['dining', 'housing', 'travel', 'subscriptions']) {
+      expect(() => buildSuggestions(populated, id)).not.toThrow();
+    }
+  });
+});
 
 describe('silence without data', () => {
   it('says so plainly rather than inventing something', () => {

@@ -8,7 +8,7 @@
  * I spend today" and a single list serves neither well.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { animateOut, stagger, useFlipList } from '../lib/motion';
 import { KINDS, categoriesFor, categoryById, kindById } from '../lib/data';
@@ -16,9 +16,10 @@ import { addDays, dayLabel, formatMoney, parseKey, todayKey } from '../lib/calc'
 import { totalsOf } from '../lib/useFinance';
 import EntrySheet from './EntrySheet';
 import { DueQueue, ScheduledList } from './Scheduled';
+import { formatBytes, openAttachment } from '../lib/attachments';
 import {
   Badge, Button, Card, CategoryDot, Empty, Icon, IconButton, Input, Money,
-  SectionTitle, Segmented, Select,
+  SectionTitle, Segmented, Select, Sheet,
 } from './ui';
 
 const KIND_TEXT = { earn: 'text-earn', spend: 'text-spend', save: 'text-save' };
@@ -31,6 +32,7 @@ export default function Ledger({ date, setDate, toast }) {
   const [kindFilter, setKindFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
   const [limit, setLimit] = useState(30);
+  const [viewing, setViewing] = useState(null);
   const cur = state.profile.currency;
   const today = todayKey();
 
@@ -227,7 +229,7 @@ export default function Ledger({ date, setDate, toast }) {
             }
           />
         ) : (
-          <EntryList entries={dayEntries} onEdit={openEdit} dispatch={dispatch} toast={toast} />
+          <EntryList entries={dayEntries} onEdit={openEdit} dispatch={dispatch} toast={toast} onView={setViewing} />
         )}
       </Card>
 
@@ -325,7 +327,7 @@ export default function Ledger({ date, setDate, toast }) {
                     {formatMoney(totalsOf(g.entries).expense, cur)} out
                   </span>
                 </button>
-                <EntryList entries={g.entries} onEdit={openEdit} dispatch={dispatch} toast={toast} />
+                <EntryList entries={g.entries} onEdit={openEdit} dispatch={dispatch} toast={toast} onView={setViewing} />
               </div>
             ))}
 
@@ -341,6 +343,8 @@ export default function Ledger({ date, setDate, toast }) {
 
       <ScheduledList toast={toast} />
 
+      <AttachmentViewer entry={viewing} onClose={() => setViewing(null)} />
+
       <EntrySheet
         open={composerOpen}
         onClose={() => { setComposerOpen(false); setEditing(null); }}
@@ -354,19 +358,19 @@ export default function Ledger({ date, setDate, toast }) {
 
 /* ─────────────────────────────── Entry rows ─────────────────────────────── */
 
-function EntryList({ entries, onEdit, dispatch, toast }) {
+function EntryList({ entries, onEdit, dispatch, toast, onView }) {
   const ref = useFlipList([entries.map((e) => e.id).join(',')]);
 
   return (
     <div ref={ref} className="divide-y divide-[color:var(--border)]">
       {entries.map((e, i) => (
-        <EntryRow key={e.id} entry={e} index={i} onEdit={onEdit} dispatch={dispatch} toast={toast} />
+        <EntryRow key={e.id} entry={e} index={i} onEdit={onEdit} dispatch={dispatch} toast={toast} onView={onView} />
       ))}
     </div>
   );
 }
 
-function EntryRow({ entry, index, onEdit, dispatch, toast }) {
+function EntryRow({ entry, index, onEdit, dispatch, toast, onView }) {
   const node = useRef(null);
   const [armed, setArmed] = useState(false);
   const cat = categoryById(entry.category);
@@ -412,6 +416,17 @@ function EntryRow({ entry, index, onEdit, dispatch, toast }) {
         </div>
       </div>
 
+      {/* Always visible, unlike edit and delete: it is the only sign the entry
+          has a receipt at all. */}
+      {entry.attachments?.length > 0 && (
+        <IconButton
+          name="flag"
+          label={`View ${entry.attachments.length} attached ${entry.attachments.length === 1 ? 'file' : 'files'}`}
+          className="size-8 shrink-0 text-brandy"
+          onClick={() => onView?.(entry)}
+        />
+      )}
+
       <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <IconButton name="edit" label="Edit" className="size-8" onClick={() => onEdit(entry)} />
         {armed ? (
@@ -427,5 +442,81 @@ function EntryRow({ entry, index, onEdit, dispatch, toast }) {
         )}
       </div>
     </div>
+  );
+}
+
+/* ───────────────────────────── Attachment viewer ─────────────────────────── */
+
+/**
+ * Shows the receipts attached to an entry.
+ *
+ * Object URLs are created when the sheet opens and revoked when it closes.
+ * Leaving them alive holds the whole blob in memory for the life of the tab,
+ * which for a session spent scrolling a year of receipts adds up to real
+ * memory for images nobody is looking at any more.
+ */
+function AttachmentViewer({ entry, onClose }) {
+  const [urls, setUrls] = useState({});
+
+  useEffect(() => {
+    if (!entry) return;
+    let cancelled = false;
+    const made = [];
+
+    Promise.all(
+      (entry.attachments || []).map(async (a) => {
+        const url = await openAttachment(a.id);
+        if (url) made.push(url);
+        return [a.id, url];
+      })
+    ).then((pairs) => {
+      if (cancelled) {
+        for (const url of made) URL.revokeObjectURL(url);
+        return;
+      }
+      setUrls(Object.fromEntries(pairs));
+    });
+
+    return () => {
+      cancelled = true;
+      for (const url of made) URL.revokeObjectURL(url);
+      setUrls({});
+    };
+  }, [entry]);
+
+  if (!entry) return null;
+
+  return (
+    <Sheet open onClose={onClose} title={entry.title} subtitle={`${dayLabel(entry.date)} · attached files`}>
+      <div className="space-y-3">
+        {(entry.attachments || []).map((a) => {
+          const url = urls[a.id];
+          return (
+            <div key={a.id} className="surface rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-hair">
+                <Icon name={a.type === 'application/pdf' ? 'ledger' : 'flag'} className="size-4 text-faint" />
+                <span className="text-[13px] font-medium truncate flex-1">{a.name}</span>
+                <span className="text-[11px] text-faint">{formatBytes(a.size)}</span>
+              </div>
+
+              {url === undefined ? (
+                <div className="h-40 animate-pulse" style={{ background: 'var(--border)' }} />
+              ) : url === null ? (
+                <p className="text-[12.5px] text-dim p-4 leading-relaxed">
+                  This file is not on this device. Attachments are stored locally and are not
+                  included in a JSON backup, so they do not travel with a restore.
+                </p>
+              ) : a.type === 'application/pdf' ? (
+                <object data={url} type="application/pdf" className="w-full h-[60vh]" aria-label={a.name}>
+                  <p className="text-[12.5px] text-dim p-4">This browser cannot preview PDFs inline.</p>
+                </object>
+              ) : (
+                <img src={url} alt={a.name} className="w-full max-h-[60vh] object-contain bg-black/20" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Sheet>
   );
 }

@@ -1,6 +1,6 @@
 /** Shared visual primitives. Everything is inline SVG or CSS — no icon deps. */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useCountUp, stagger } from '../lib/motion';
 import { formatMoney, formatPercent } from '../lib/calc';
@@ -532,8 +532,13 @@ export function Ring({ value, max, size = 190, stroke = 13, children, tone = 'br
   const paceAngle = pace !== null ? Math.min(1, Math.max(0, pace)) * 360 - 90 : null;
 
   return (
-    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
+    <div
+      className="relative grid place-items-center"
+      style={{ width: size, height: size }}
+      role="img"
+      aria-label={`${Math.round(clamped * 100)}% of the limit used`}
+    >
+      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor={stops[0]} />
@@ -595,7 +600,15 @@ export function Bar({
           <span className="text-[12px] text-dim tabular shrink-0">{right}</span>
         </div>
       )}
-      <div className="relative h-2 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+      <div
+        className="relative h-2 rounded-full overflow-hidden"
+        style={{ background: 'var(--border)' }}
+        role="progressbar"
+        aria-valuenow={Math.round(p)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={typeof label === 'string' ? label : undefined}
+      >
         <div
           className="h-full rounded-full"
           style={{
@@ -623,15 +636,72 @@ export function Bar({
 
 /* ─────────────────────────────  Sheet / modal  ─────────────────────────── */
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Sheet({ open, onClose, title, subtitle, children, footer, size = 'md' }) {
+  const panel = useRef(null);
+  const restoreTo = useRef(null);
+  const titleId = useId();
+
+  /**
+   * Focus management.
+   *
+   * A dialog that does not hold focus is a dialog only for people using a
+   * mouse: Tab walks straight out of it into the page behind, which is still
+   * there and still interactive as far as the keyboard is concerned. Trapping
+   * Tab and returning focus to whatever opened the sheet is what makes the
+   * whole app usable without a pointer.
+   */
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => e.key === 'Escape' && onClose();
+
+    restoreTo.current = document.activeElement;
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const items = [...(panel.current?.querySelectorAll(FOCUSABLE) || [])].filter(
+        (el) => el.offsetParent !== null
+      );
+      if (!items.length) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+
+      // Wrap at both ends, and pull focus back in if it has escaped entirely.
+      if (e.shiftKey && (active === first || !panel.current.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panel.current.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+
+    // Move focus into the sheet, preferring a field the user is meant to fill.
+    const id = requestAnimationFrame(() => {
+      const auto = panel.current?.querySelector('[autofocus]');
+      const first = panel.current?.querySelector(FOCUSABLE);
+      (auto || first)?.focus();
+    });
+
     return () => {
+      cancelAnimationFrame(id);
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
+      // Back where they were, so closing a sheet does not dump focus at the
+      // top of the document.
+      if (restoreTo.current instanceof HTMLElement) restoreTo.current.focus();
     };
   }, [open, onClose]);
 
@@ -643,17 +713,23 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
   // `position: fixed` and the overlay would no longer cover the viewport.
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm animate-[pop_0.2s_ease-out]" onClick={onClose} />
       <div
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm animate-[pop_0.2s_ease-out]"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         className={`relative w-full ${widths[size]} max-h-[92dvh] sm:max-h-[86dvh] flex flex-col
                     rounded-t-3xl sm:rounded-3xl surface animate-rise sm:mx-4`}
         style={{ background: 'var(--bg-elev)' }}
       >
         <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b border-hair shrink-0">
           <div className="min-w-0">
-            <h3 className="text-lg font-semibold truncate">{title}</h3>
+            <h3 id={titleId} className="text-lg font-semibold truncate">{title}</h3>
             {subtitle && <p className="text-[12.5px] text-dim mt-0.5">{subtitle}</p>}
           </div>
           <IconButton name="x" label="Close" onClick={onClose} />
@@ -770,7 +846,14 @@ export function Toast({ message, onDone }) {
 
   if (!message) return null;
   return createPortal(
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-24 sm:bottom-8 z-[60] animate-rise">
+    /* Announced rather than merely shown: a confirmation nobody can perceive is
+       not a confirmation. `polite` so it waits for a pause instead of cutting
+       across whatever is being read. */
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed left-1/2 -translate-x-1/2 bottom-24 sm:bottom-8 z-[60] animate-rise"
+    >
       <div className="surface rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-sm shadow-xl"
            style={{ background: 'var(--bg-elev)' }}>
         <span className="grid place-items-center size-5 rounded-full bg-brand-500/25 text-brandy">

@@ -21,8 +21,18 @@
  */
 
 const DB_NAME = 'cointrack';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'state';
+/**
+ * Attachments live in their own object store, never in the state object.
+ *
+ * The state is serialised and written on every change, and mirrored into
+ * localStorage — a single phone photo would exceed that mirror's whole quota
+ * and be re-serialised on every keystroke. Keeping blobs out of it means the
+ * ledger stays a few hundred kilobytes of JSON no matter how many receipts are
+ * attached to it.
+ */
+const FILES = 'files';
 const STATE_KEY = 'app';
 const SNAPSHOT_KEY = 'snapshots';
 const LS_KEY = 'cointrack.v1';
@@ -61,6 +71,7 @@ function openDB() {
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(FILES)) db.createObjectStore(FILES);
     };
     req.onsuccess = settle(() => resolve(req.result));
     req.onerror = settle(() => reject(req.error));
@@ -72,29 +83,115 @@ function openDB() {
   return dbPromise;
 }
 
-function idbGet(key) {
+function idbGet(key, store = STORE) {
   return openDB().then(
     (db) =>
       new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readonly');
-        const req = tx.objectStore(STORE).get(key);
+        const tx = db.transaction(store, 'readonly');
+        const req = tx.objectStore(store).get(key);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       })
   );
 }
 
-function idbSet(key, value) {
+function idbSet(key, value, store = STORE) {
   return openDB().then(
     (db) =>
       new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(value, key);
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).put(value, key);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
       })
   );
+}
+
+/* ───────────────────────────── Attachments ───────────────────────────── */
+
+/**
+ * Blobs, addressed by id.
+ *
+ * These deliberately have no mirror and no snapshot. A receipt is nice to have
+ * and reconstructible from the paper original; the ledger is not, and spending
+ * the storage budget on duplicated images at the expense of the entries would
+ * be the wrong trade.
+ */
+export function putFile(id, blob) {
+  return idbSet(id, blob, FILES);
+}
+
+export function getFile(id) {
+  return idbGet(id, FILES).catch(() => null);
+}
+
+export function deleteFile(id) {
+  return openDB()
+    .then(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(FILES, 'readwrite');
+          tx.objectStore(FILES).delete(id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        })
+    )
+    .catch(() => {});
+}
+
+/** Total bytes held in attachments, for the storage panel. */
+export async function fileUsage() {
+  try {
+    const db = await openDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILES, 'readonly');
+      const store = tx.objectStore(FILES);
+      let bytes = 0;
+      let count = 0;
+      const cursor = store.openCursor();
+      cursor.onsuccess = () => {
+        const c = cursor.result;
+        if (!c) return resolve({ bytes, count });
+        bytes += c.value?.size || 0;
+        count += 1;
+        c.continue();
+      };
+      cursor.onerror = () => reject(cursor.error);
+    });
+  } catch {
+    return { bytes: 0, count: 0 };
+  }
+}
+
+/**
+ * Remove blobs no entry references any more.
+ *
+ * Deleting an entry does not reach into IndexedDB — that would make every
+ * delete an async operation that can fail halfway. Instead the orphans are
+ * swept up afterwards, which is safe because a blob nothing points at is
+ * unreachable either way.
+ */
+export async function pruneFiles(keepIds) {
+  try {
+    const keep = new Set(keepIds);
+    const db = await openDB();
+    await new Promise((resolve) => {
+      const tx = db.transaction(FILES, 'readwrite');
+      const store = tx.objectStore(FILES);
+      const cursor = store.openKeyCursor();
+      cursor.onsuccess = () => {
+        const c = cursor.result;
+        if (!c) return resolve();
+        if (!keep.has(c.key)) store.delete(c.key);
+        c.continue();
+      };
+      cursor.onerror = () => resolve();
+      tx.oncomplete = () => resolve();
+    });
+  } catch {
+    /* a failed sweep only wastes space */
+  }
 }
 
 /* ───────────────────────── Eviction protection ───────────────────────── */
@@ -323,6 +420,7 @@ export async function clearAll() {
       (async () => {
         await idbSet(STATE_KEY, undefined);
         await idbSet(SNAPSHOT_KEY, []);
+        await pruneFiles([]); // an erase must take the receipts with it
       })(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('clear timed out')), 4000)),
     ]);

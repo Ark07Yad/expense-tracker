@@ -105,6 +105,14 @@ as controls rather than assumed, because both fail silently. A wrong date order
 shifts a year of history; a wrong sign turns spending into income. Where the
 evidence is genuinely ambiguous the parser says so instead of picking.
 
+**Receipts live outside the state object.** Entries carry only an attachment's
+name, type and size; the bytes go into a separate IndexedDB store. The state is
+serialised and mirrored to localStorage on every change, and a single phone
+photo would exceed that mirror's entire quota — and be re-serialised on every
+keystroke. Images are downscaled to 1600px before storing, and orphaned blobs
+are swept after the fact rather than during a delete, so deleting an entry stays
+synchronous and cannot half-fail.
+
 **Two tabs do not fight.** Each tab holds and saves the whole state, so without
 coordination the second one to write silently wipes the first one's entries. A
 `BroadcastChannel` carries only a timestamp; a tab that hears about a newer write
@@ -112,13 +120,55 @@ re-reads storage and decides for itself. Adopting a remote state deliberately
 does *not* trigger a save — that echo is what turns coordination into an
 infinite write loop between the two tabs.
 
+## Performance
+
+The advisor is the expensive part: it re-derives whole months to answer
+questions, and the dashboard asks it for four sections on every render. With two
+years of entries that measured **28ms**, which is two dropped frames on the
+render path for work that had already been done.
+
+Derived values are now cached against the identity of the state they came from.
+State is replaced wholesale on every change, so object identity *is* data
+identity, and a `WeakMap` means a superseded state takes its cache with it.
+That took the same call to **4.4ms cold and effectively free on every render
+after the first**. `src/lib/perf.test.js` holds the budget, and deliberately
+measures a *cold* call — a benchmark that only ever hits the cache is the cache
+testing itself.
+
+The bundle is split so the first paint carries about **106 kB gzipped** instead
+of 234 kB. Recharts is larger than React and all of the application code
+together, so it is loaded after the page is usable: the four non-landing screens
+are route-split, and the dashboard's own charts are a lazy island behind the
+hero. The figures and suggestions are readable while the charts are still
+arriving, which is the order people read them in anyway.
+
+## Offline
+
+Installable, and works with no network. The service worker in `public/sw.js`
+caches only the app's own files — there is no data in it, since the ledger lives
+in IndexedDB and never passes through a request. Built assets are cache-first
+because their filenames contain a content hash and cannot change; navigations
+are network-first so a deploy is picked up immediately, with the cached shell as
+the fallback rather than the default. That distinction is what stops a service
+worker stranding people on a version from March.
+
+## Keyboard
+
+`1`–`6` for screens, `n` for a new entry, `t` to jump to today, `d` for theme,
+`?` for the list. Single keys with no modifiers, which is only safe because they
+are ignored entirely whenever focus is in a field — otherwise typing "n" in a
+description would silently open a dialog and lose the entry.
+
+Dialogs trap Tab and return focus to whatever opened them, and toasts announce
+themselves through a live region.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-180 tests over the pure engines — dates and period boundaries, aggregation,
+192 tests over the pure engines — dates and period boundaries, aggregation,
 schedules, goals, CSV parsing, and the advisor's rules. They lean on properties rather than golden
 values where they can: the chart buckets must sum to the headline the screen
 prints, a category that vanished must still count as a movement, and a holding

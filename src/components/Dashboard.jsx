@@ -9,10 +9,7 @@
  * is trending toward, then what to do about it.
  */
 
-import { useMemo } from 'react';
-import {
-  Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts';
+import { Suspense, lazy, useMemo } from 'react';
 import { useStore } from '../lib/store';
 import { useDailySpend, useFinance, useInvestments } from '../lib/useFinance';
 import { headlineSuggestions } from '../lib/insights';
@@ -27,9 +24,17 @@ import { dayLabel, formatMoney, formatPercent, shortDate } from '../lib/calc';
 const KIND_TEXT = { earn: 'text-earn', spend: 'text-spend', save: 'text-save' };
 import {
   Badge, Bar, Button, Card, CategoryDot, Delta, Empty, Icon, Money, Ring,
-  SectionTitle, Stat, stagger, tooltipStyle,
+  SectionTitle, Stat, stagger,
 } from './ui';
 import { DueBanner } from './Scheduled';
+
+/*
+ * All three resolve the same chunk, so this is one extra request, made after
+ * the page is already usable.
+ */
+const SpendTrend = lazy(() => import('./DashboardCharts').then((m) => ({ default: m.SpendTrend })));
+const CategoryDonut = lazy(() => import('./DashboardCharts').then((m) => ({ default: m.CategoryDonut })));
+const NetWorthSpark = lazy(() => import('./DashboardCharts').then((m) => ({ default: m.NetWorthSpark })));
 
 export default function Dashboard({ onNavigate }) {
   const { state } = useStore();
@@ -240,47 +245,9 @@ export default function Dashboard({ onNavigate }) {
           <SectionTitle icon="wave" sub="Daily spend, with a seven-day average through it">
             Last 30 days
           </SectionTitle>
-          <div className="h-52 -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={spark} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="dashSpend" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.45} />
-                    <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="label" axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={26} />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  width={46}
-                  tickFormatter={(v) => formatMoney(v, cur, { compact: true, decimals: 0 })}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  labelStyle={{ color: 'var(--text-dim)' }}
-                  formatter={(v, n) => [formatMoney(v, cur), n === 'avg' ? '7-day average' : 'Spent']}
-                />
-                <Area
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="value"
-                  stroke="var(--color-brand-400)"
-                  strokeWidth={1.6}
-                  fill="url(#dashSpend)"
-                />
-                <Area
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="avg"
-                  stroke="var(--tone-invest)"
-                  strokeWidth={2.2}
-                  strokeDasharray="5 4"
-                  fill="none"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <Suspense fallback={<div className="h-52 rounded-2xl animate-pulse" style={{ background: 'var(--border)' }} />}>
+            <SpendTrend data={spark} cur={cur} />
+          </Suspense>
         </Card>
 
         <Card className="lg:col-span-2 p-5">
@@ -290,28 +257,9 @@ export default function Dashboard({ onNavigate }) {
           ) : (
             <>
               <div className="h-44 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={donutData}
-                      dataKey="total"
-                      nameKey="label"
-                      innerRadius="62%"
-                      outerRadius="94%"
-                      paddingAngle={2}
-                      stroke="none"
-                      isAnimationActive={false}
-                    >
-                      {donutData.map((c) => (
-                        <Cell key={c.id} fill={c.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(v, n) => [formatMoney(v, cur), n]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<div className="absolute inset-4 rounded-full animate-pulse" style={{ background: 'var(--border)' }} />}>
+                  <CategoryDonut data={donutData} cur={cur} />
+                </Suspense>
                 <div className="absolute inset-0 grid place-items-center pointer-events-none">
                   <div className="text-center">
                     <div className="text-[10.5px] uppercase tracking-wider text-faint">Total</div>
@@ -416,44 +364,9 @@ export default function Dashboard({ onNavigate }) {
                 </span>
               </div>
 
-              <div className="h-24 mt-3 -mx-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={inv.series} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
-                    {/* A zero-based axis flattens a net-worth line into a solid
-                        block — the month-to-month movement is the whole point,
-                        so the floor sits just under the lowest value. */}
-                    <YAxis hide domain={[(min) => Math.max(0, min * 0.88), (max) => max * 1.04]} />
-                    <defs>
-                      <linearGradient id="dashWorth" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      labelFormatter={(_, p) => p?.[0]?.payload?.label ?? ''}
-                      formatter={(v, n) => [formatMoney(v, cur), n === 'invested' ? 'Paid in' : 'Value']}
-                    />
-                    <Area
-                      isAnimationActive={false}
-                      type="monotone"
-                      dataKey="value"
-                      stroke="var(--tone-invest)"
-                      strokeWidth={2}
-                      fill="url(#dashWorth)"
-                    />
-                    <Area
-                      isAnimationActive={false}
-                      type="monotone"
-                      dataKey="invested"
-                      stroke="var(--text-faint)"
-                      strokeWidth={1.2}
-                      strokeDasharray="4 4"
-                      fill="none"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              <Suspense fallback={<div className="h-24 mt-3 rounded-xl animate-pulse" style={{ background: 'var(--border)' }} />}>
+                <NetWorthSpark data={inv.series} cur={cur} />
+              </Suspense>
 
               <div className="space-y-1.5 mt-3">
                 {inv.byClass.slice(0, 4).map((c) => (

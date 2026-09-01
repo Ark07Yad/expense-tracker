@@ -22,7 +22,7 @@
  *      dismissed next month instead of resurfacing with a new random key.
  */
 
-import { computeFinance, computeInvestments } from './useFinance';
+import { financeFor, investmentsFor, memoByState } from './useFinance';
 import { goalsWithProgress } from './goals';
 import { categoryById } from './data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, todayKey } from './calc';
@@ -40,16 +40,23 @@ const RANK = { bad: 0, warn: 1, info: 2, good: 3 };
 
 /* ────────────────────────────────  Helpers  ─────────────────────────────── */
 
-/** Monthly expense totals for the last n months, oldest first. */
+/**
+ * Monthly expense totals for the last n months, oldest first.
+ *
+ * Memoised as a whole: every section that needs history needs the same history,
+ * and recomputing six months per section was most of the advisor's cost.
+ */
 function monthlyHistory(state, n = 6) {
-  const out = [];
-  let m = monthKey(todayKey());
-  for (let i = 0; i < n; i++) {
-    const f = computeFinance(state, 'month', -i);
-    out.unshift({ month: m, ...f.totals, cats: f.expenseCats });
-    m = addMonthKeys(m, -1);
-  }
-  return out;
+  return memoByState(state, `history:${n}`, () => {
+    const out = [];
+    let m = monthKey(todayKey());
+    for (let i = 0; i < n; i++) {
+      const f = financeFor(state, 'month', -i);
+      out.unshift({ month: m, ...f.totals, cats: f.expenseCats });
+      m = addMonthKeys(m, -1);
+    }
+    return out;
+  });
 }
 
 const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
@@ -61,14 +68,18 @@ const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length :
  * @returns        suggestions, most urgent first
  */
 export function buildSuggestions(state, section = 'overall') {
+  return memoByState(state, `s:${section}`, () => buildSection(state, section));
+}
+
+function buildSection(state, section) {
   const cur = state.profile.currency;
   const money = (v, opts) => formatMoney(v, cur, opts);
   const out = [];
   const add = (s) => out.push({ tone: 'info', section, priority: 5, ...s });
 
-  const month = computeFinance(state, 'month', 0);
-  const prev = computeFinance(state, 'month', -1);
-  const inv = computeInvestments(state, 12);
+  const month = financeFor(state, 'month', 0);
+  const prev = financeFor(state, 'month', -1);
+  const inv = investmentsFor(state, 12);
   const history = monthlyHistory(state, 6);
   const funded = history.filter((h) => h.count > 0);
   const enoughHistory = funded.length >= 3;
@@ -763,7 +774,7 @@ function runwayText(state, month, money) {
   const savedTotal = state.entries
     .filter((e) => e.kind === 'saving')
     .reduce((s, e) => s + Math.abs(Number(e.amount) || 0), 0);
-  const inv = computeInvestments(state, 12);
+  const inv = investmentsFor(state, 12);
   const liquid = inv.byClass
     .filter((c) => c.id === 'cash' || c.id === 'bond')
     .reduce((s, c) => s + c.value, 0);

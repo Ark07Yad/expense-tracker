@@ -1,13 +1,24 @@
-import { useCallback, useState } from 'react';
+import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import { useStore } from './lib/store';
 import { todayKey } from './lib/calc';
+import { SHORTCUTS, useShortcuts } from './lib/useShortcuts';
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
 import Ledger from './components/Ledger';
-import Analytics from './components/Analytics';
-import Investments from './components/Investments';
-import Advisor from './components/Advisor';
-import Settings from './components/Settings';
+
+/*
+ * Everything past the first two screens is loaded on demand.
+ *
+ * Home and Ledger are where every session starts and where most of it is
+ * spent; the other four are visited occasionally and drag in the heaviest
+ * dependency in the app between them. Splitting them keeps the first paint to
+ * what is actually about to be shown, and each chunk is then cached separately
+ * — a change to Settings no longer invalidates the bundle everyone downloads.
+ */
+const Analytics = lazy(() => import('./components/Analytics'));
+const Investments = lazy(() => import('./components/Investments'));
+const Advisor = lazy(() => import('./components/Advisor'));
+const Settings = lazy(() => import('./components/Settings'));
 import EntrySheet from './components/EntrySheet';
 import { Icon, Sheet, ThemeToggle, Toast } from './components/ui';
 
@@ -21,6 +32,27 @@ const NAV = [
 
 const EXTRA = [{ id: 'settings', label: 'Settings', icon: 'settings' }];
 
+/**
+ * Placeholder while a screen's chunk arrives.
+ *
+ * Shaped like the cards it replaces rather than a spinner: on a fast connection
+ * this is on screen for a frame or two, and a shape that matches what follows
+ * reads as loading rather than as a jolt.
+ */
+function ScreenSkeleton() {
+  return (
+    <div className="space-y-4" aria-hidden="true">
+      {[176, 260, 200].map((h, i) => (
+        <div
+          key={i}
+          className="surface rounded-3xl animate-pulse"
+          style={{ height: h, opacity: 0.6 - i * 0.15 }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const { state, dispatch } = useStore();
   const [tab, setTab] = useState('home');
@@ -30,6 +62,7 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false);
   /** Which advisor section to land on when a suggestion is followed. */
   const [advisorSection, setAdvisorSection] = useState('overall');
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const toast = useCallback((m) => setToastMsg(m), []);
 
@@ -55,6 +88,36 @@ export default function App() {
     setMoreOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+
+  /*
+   * Shortcuts are disabled while a dialog is open: the sheet owns the keyboard
+   * then, and a stray "2" behind a modal navigating the page underneath would
+   * be baffling.
+   */
+  const anyDialogOpen = composerOpen || moreOpen || helpOpen;
+  const nextTheme = { dark: 'light', light: 'system', system: 'dark' };
+
+  const shortcuts = useMemo(
+    () => ({
+      1: () => navigate('home'),
+      2: () => navigate('ledger'),
+      3: () => navigate('analytics'),
+      4: () => navigate('invest'),
+      5: () => navigate('advisor'),
+      6: () => navigate('settings'),
+      n: () => setComposerOpen(true),
+      t: () => {
+        setDate(todayKey());
+        navigate('ledger');
+      },
+      d: () => dispatch({ type: 'theme', theme: nextTheme[state.theme] || 'dark' }),
+      '?': () => setHelpOpen(true),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navigate, state.theme]
+  );
+
+  useShortcuts(shortcuts, { enabled: state.onboarded && !anyDialogOpen });
 
   if (!state.onboarded) return <Onboarding />;
 
@@ -103,8 +166,17 @@ export default function App() {
             New entry
           </button>
 
-          <div className="mt-auto">
+          <div className="mt-auto space-y-1">
             <ThemeToggle theme={state.theme} onChange={(theme) => dispatch({ type: 'theme', theme })} />
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-[13.5px] font-medium
+                         text-dim transition-all hover:[background:var(--surface)] hover:text-[color:var(--text)]"
+            >
+              <Icon name="info" className="size-[18px] shrink-0" />
+              <span>Shortcuts</span>
+              <kbd className="ml-auto text-[11px] px-1.5 py-0.5 rounded surface text-faint">?</kbd>
+            </button>
           </div>
         </aside>
 
@@ -122,14 +194,16 @@ export default function App() {
           </header>
 
           <div key={tab} className="animate-rise">
-            {tab === 'home' && <Dashboard onNavigate={navigate} />}
-            {tab === 'ledger' && <Ledger date={date} setDate={setDate} toast={toast} />}
-            {tab === 'analytics' && <Analytics onNavigate={navigate} />}
-            {tab === 'invest' && <Investments toast={toast} />}
-            {tab === 'advisor' && (
-              <Advisor section={advisorSection} setSection={setAdvisorSection} onNavigate={navigate} toast={toast} />
-            )}
-            {tab === 'settings' && <Settings toast={toast} />}
+            <Suspense fallback={<ScreenSkeleton />}>
+              {tab === 'home' && <Dashboard onNavigate={navigate} />}
+              {tab === 'ledger' && <Ledger date={date} setDate={setDate} toast={toast} />}
+              {tab === 'analytics' && <Analytics onNavigate={navigate} />}
+              {tab === 'invest' && <Investments toast={toast} />}
+              {tab === 'advisor' && (
+                <Advisor section={advisorSection} setSection={setAdvisorSection} onNavigate={navigate} toast={toast} />
+              )}
+              {tab === 'settings' && <Settings toast={toast} />}
+            </Suspense>
           </div>
         </main>
       </div>
@@ -200,6 +274,30 @@ export default function App() {
         defaultDate={tab === 'ledger' ? date : todayKey()}
         onSaved={toast}
       />
+
+      <Sheet
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title="Keyboard shortcuts"
+        subtitle="Single keys. They stay out of the way while you are typing."
+        size="sm"
+      >
+        <div className="space-y-1">
+          {SHORTCUTS.map((s) => (
+            <div key={s.label} className="flex items-center gap-3 py-2 border-b border-hair last:border-0">
+              <span className="text-[13.5px] flex-1">{s.label}</span>
+              {s.keys.map((k) => (
+                <kbd
+                  key={k}
+                  className="text-[12px] font-medium px-2 py-1 rounded-lg surface tabular min-w-8 text-center"
+                >
+                  {k}
+                </kbd>
+              ))}
+            </div>
+          ))}
+        </div>
+      </Sheet>
 
       <Toast message={toastMsg} onDone={() => setToastMsg('')} />
     </div>

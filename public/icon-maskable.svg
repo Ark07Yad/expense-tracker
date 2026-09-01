@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#b79bff" />
+      <stop offset="45%" stop-color="#8e6bff" />
+      <stop offset="100%" stop-color="#5f2fd0" />
+    </linearGradient>
+  </defs>
+  <!-- Full bleed, with the mark inside the 40% safe zone a maskable icon needs:
+       launchers crop this to a circle or a squircle and anything near the edge
+       is cut off. -->
+  <rect width="64" height="64" fill="url(#g)" />
+  <g stroke="#120a26" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M20 44V26l12-6 12 6v18" />
+    <path d="M20 44h24" />
+    <path d="M27 40v-6M32 40v-9M37 40v-4" />
+  </g>
+</svg>

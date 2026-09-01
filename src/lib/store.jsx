@@ -11,6 +11,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef } fro
 import { categoriesFor } from './data';
 import { monthKey, todayKey } from './calc';
 import * as persist from './persist';
+import { referencedIds } from './attachments';
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -162,6 +163,9 @@ function reducer(state, action) {
         ...(e.kind === 'saving' && e.goalId ? { goalId: e.goalId } : {}),
         ...(e.fx && Number(e.fx.amount) > 0 && Number(e.fx.rate) > 0
           ? { fx: { currency: e.fx.currency, amount: Number(e.fx.amount), rate: Number(e.fx.rate) } }
+          : {}),
+        ...(Array.isArray(e.attachments) && e.attachments.length
+          ? { attachments: e.attachments }
           : {}),
       };
       return { ...state, entries: [entry, ...state.entries] };
@@ -527,6 +531,20 @@ export function StoreProvider({ children }) {
     });
     return () => window.removeEventListener('pagehide', flush);
   }, []);
+
+  /*
+   * Sweep attachments no entry points at any more.
+   *
+   * Deleting an entry deliberately does not reach into IndexedDB — that would
+   * make every delete an async operation that can fail halfway through and
+   * leave the ledger and the blob store disagreeing. Collecting the orphans
+   * afterwards is safe, because a blob nothing references is unreachable
+   * either way, and idempotent if it fails.
+   */
+  useEffect(() => {
+    const id = setTimeout(() => persist.pruneFiles(referencedIds(state.entries)), 4000);
+    return () => clearTimeout(id);
+  }, [state.entries]);
 
   // Ask the browser to stop evicting this origin once the user has real data in
   // it. Asking on first paint is both premature and more likely to be refused.

@@ -11,11 +11,12 @@
  * default, so the fastest possible entry is a number and one tap.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { CURRENCIES, KINDS, QUICK_ADD, categoriesFor, categoryById, kindById } from '../lib/data';
 import { FREQUENCIES } from '../lib/recurring';
 import { goalsWithProgress } from '../lib/goals';
+import { ACCEPTED, attachFile, formatBytes, removeAttachment } from '../lib/attachments';
 import { dayLabel, formatMoney, todayKey } from '../lib/calc';
 import {
   Button, CategoryDot, Field, Icon, Input, MoneyInput, NumberInput, Segmented, Select,
@@ -42,6 +43,8 @@ const blank = (date) => ({
    * offline and honestly.
    */
   fx: null,
+  /** [{ id, name, type, size, at }] — the bytes live in IndexedDB, not here. */
+  attachments: [],
 });
 
 export default function EntrySheet({ open, onClose, editing = null, defaultDate, onSaved }) {
@@ -51,6 +54,9 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
   /** 'none', or a frequency id — creating a schedule alongside this entry. */
   const [repeat, setRepeat] = useState('none');
   const [fxOpen, setFxOpen] = useState(false);
+  const [attachError, setAttachError] = useState('');
+  const [attaching, setAttaching] = useState(false);
+  const fileRef = useRef(null);
 
   // Re-seed whenever the sheet opens, so a cancelled edit never leaks into the
   // next entry and the date follows whichever day the ledger is showing.
@@ -60,12 +66,43 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
     setRepeat('none');
     setDraft(editing ? { ...editing } : blank(defaultDate));
     setFxOpen(!!editing?.fx);
+    setAttachError('');
   }, [open, editing, defaultDate]);
 
   const kind = kindById(draft.kind);
   const cats = categoriesFor(draft.kind);
   const goals = useMemo(() => goalsWithProgress(state, todayKey()).filter((g) => !g.complete), [state]);
   const patch = (p) => setDraft((d) => ({ ...d, ...p }));
+
+  const attachments = draft.attachments || [];
+
+  const onPickFile = async (event) => {
+    const files = [...(event.target.files || [])];
+    event.target.value = '';
+    if (!files.length) return;
+
+    setAttaching(true);
+    setAttachError('');
+    for (const file of files) {
+      try {
+        const meta = await attachFile(file);
+        setDraft((d) => ({ ...d, attachments: [...(d.attachments || []), meta] }));
+      } catch (err) {
+        setAttachError(err.message);
+      }
+    }
+    setAttaching(false);
+  };
+
+  /*
+   * Removing here deletes the blob immediately, which is safe: it has not been
+   * committed to an entry yet, or — when editing — the entry is about to be
+   * saved without it. The periodic sweep in the store covers anything missed.
+   */
+  const dropAttachment = (id) => {
+    removeAttachment(id);
+    setDraft((d) => ({ ...d, attachments: (d.attachments || []).filter((a) => a.id !== id) }));
+  };
 
   const home = state.profile.currency;
   const fx = draft.fx;
@@ -391,6 +428,58 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
               maxLength={180}
             />
           </Field>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <span className="text-[12px] font-medium text-dim">Receipt</span>
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={attaching}
+              className="inline-flex items-center gap-1.5 text-[12px] text-dim hover:text-[color:var(--text)]
+                         transition-colors disabled:opacity-50"
+            >
+              <Icon name="plus" className="size-3.5" />
+              {attaching ? 'Saving…' : 'Attach'}
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={ACCEPTED}
+            multiple
+            className="hidden"
+            onChange={onPickFile}
+          />
+
+          {attachments.length === 0 ? (
+            <p className="text-[11.5px] text-faint leading-relaxed">
+              A photo or a PDF, kept on this device. Images are shrunk before saving so a
+              few receipts do not crowd out the ledger.
+            </p>
+          ) : (
+            <div className="flex gap-1.5 flex-wrap">
+              {attachments.map((a) => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-2 pl-2.5 pr-1 py-1 rounded-full surface border border-hair"
+                >
+                  <Icon name={a.type === 'application/pdf' ? 'ledger' : 'flag'} className="size-3.5 text-faint" />
+                  <span className="text-[12px] max-w-32 truncate">{a.name}</span>
+                  <span className="text-[10.5px] text-faint">{formatBytes(a.size)}</span>
+                  <button
+                    onClick={() => dropAttachment(a.id)}
+                    aria-label={`Remove ${a.name}`}
+                    className="size-5 rounded-full grid place-items-center text-faint
+                               hover:text-[color:var(--text)] transition-colors"
+                  >
+                    <Icon name="x" className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {attachError && <p className="text-[11.5px] text-bad mt-1.5">{attachError}</p>}
         </div>
 
         {/* Offered only when creating. Turning an existing entry into a
