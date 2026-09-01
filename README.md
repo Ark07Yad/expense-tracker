@@ -14,8 +14,8 @@ sent anywhere.
 npm install && npm run dev
 ```
 
-Then open <http://localhost:5181>. `npm run build` produces a static `dist/`;
-`npm run lint` runs oxlint.
+Then open <http://localhost:5181>. `npm run build` produces a static `dist/`,
+`npm run lint` runs oxlint, and `npm test` runs the suite.
 
 On first run you can either set up a profile or load five months of generated
 sample data — the sample set is seeded, so it comes out the same every time, and
@@ -28,7 +28,7 @@ say.
 | | |
 |---|---|
 | **Home** | This month at a glance: a spend dial against your budgets with a pace marker, in/out/saved with change against last month, the three most urgent suggestions, a 30-day spend trend, the category mix, budget bars and net worth. |
-| **Ledger** | The daily log. A fourteen-day rhythm strip, one day's entries with running totals, and a searchable archive of everything grouped by date. Each entry has a title, an amount, a category, a date and an optional description. |
+| **Ledger** | The daily log. A fourteen-day rhythm strip, one day's entries with running totals, and a searchable archive of everything grouped by date. Each entry has a title, an amount, a category, a date and an optional description. Recurring entries are offered here for confirmation, and their schedules are managed at the bottom. |
 | **Trends** | The same four questions at four zoom levels — week, month, quarter, year — with a cash-flow chart, a running-total view against a paced budget, a stacked category-mix view, a breakdown donut, biggest movements against the previous period, a per-category table, a daily-spend heatmap and a side-by-side comparison table. |
 | **Invest** | Holdings and net worth. You enter what each holding is worth at the end of a month and what you paid in that month; the chart plots value against contributions so growth is separable from deposits. Includes allocation by asset class, per-holding gain, a stale-value warning and a contribution history table. |
 | **Advice** | The suggestion box. Pick a section — the whole picture, spending, budgets, income, savings, investments, or a single category — and get rules applied to your own entries, plus a place to keep your own notes. |
@@ -45,6 +45,7 @@ reducer behind a context.
 src/
   lib/
     calc.js        dates, period ranges, bucketing, money formatting
+    recurring.js   schedules for repeating entries
     data.js        the three ledger kinds, categories, asset classes, currencies
     useFinance.js  every derived number, as pure functions plus thin hooks
     insights.js    the rule engine behind the advisor
@@ -79,6 +80,33 @@ what you paid in; only the gap above it is a return.
 **Aggregation is pure.** The advisor calls the same functions the charts do,
 outside React. If the two computed their own totals they would eventually
 disagree, and the app would be quietly lying somewhere.
+
+**Recurring entries are offered, never posted.** A schedule works out what it
+owes and puts it in a queue; you confirm or skip each one. Auto-posting is less
+typing, but a ledger that invents transactions is one you cannot trust, and the
+only thing this app has going for it is that its numbers are ones you put there.
+Skipping advances the schedule exactly as posting does, so a subscription you
+cancelled stops asking.
+
+**Two tabs do not fight.** Each tab holds and saves the whole state, so without
+coordination the second one to write silently wipes the first one's entries. A
+`BroadcastChannel` carries only a timestamp; a tab that hears about a newer write
+re-reads storage and decides for itself. Adopting a remote state deliberately
+does *not* trigger a save — that echo is what turns coordination into an
+infinite write loop between the two tabs.
+
+## Tests
+
+```bash
+npm test
+```
+
+127 tests over the pure engines — dates and period boundaries, aggregation,
+schedules, and the advisor's rules. They lean on properties rather than golden
+values where they can: the chart buckets must sum to the headline the screen
+prints, a category that vanished must still count as a movement, and a holding
+nobody revalued must not drag net worth to zero. The advisor suite also pins the
+boundary in the next section, so it cannot be eroded by accident.
 
 ## What the advisor does and does not do
 

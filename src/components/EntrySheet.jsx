@@ -14,9 +14,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { KINDS, QUICK_ADD, categoriesFor, categoryById, kindById } from '../lib/data';
+import { FREQUENCIES } from '../lib/recurring';
 import { dayLabel, todayKey } from '../lib/calc';
 import {
-  Button, CategoryDot, Field, Icon, Input, MoneyInput, Sheet, Textarea, mix, toneColor,
+  Button, CategoryDot, Field, Icon, Input, MoneyInput, Segmented, Sheet, Textarea, mix, toneColor,
 } from './ui';
 
 const blank = (date) => ({
@@ -32,12 +33,15 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
   const { state, dispatch } = useStore();
   const [draft, setDraft] = useState(() => blank(defaultDate));
   const [error, setError] = useState('');
+  /** 'none', or a frequency id — creating a schedule alongside this entry. */
+  const [repeat, setRepeat] = useState('none');
 
   // Re-seed whenever the sheet opens, so a cancelled edit never leaks into the
   // next entry and the date follows whichever day the ledger is showing.
   useEffect(() => {
     if (!open) return;
     setError('');
+    setRepeat('none');
     setDraft(editing ? { ...editing } : blank(defaultDate));
   }, [open, editing, defaultDate]);
 
@@ -80,7 +84,31 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
       onSaved?.(`Updated "${draft.title.trim() || 'entry'}"`);
     } else {
       dispatch({ type: 'addEntry', entry: { ...draft, amount } });
-      onSaved?.(`${kind.label} logged — ${draft.title.trim() || categoryById(draft.category).label}`);
+
+      if (repeat !== 'none') {
+        /*
+         * The entry just logged *is* this period's occurrence, so the rule is
+         * anchored on it and marked resolved for that date. Without that, the
+         * queue would immediately offer the same day back and the user would
+         * have logged rent twice on their first attempt at scheduling it.
+         */
+        dispatch({
+          type: 'addRecurring',
+          rule: {
+            ...draft,
+            amount,
+            frequency: repeat,
+            anchorDate: draft.date,
+            lastResolved: draft.date,
+          },
+        });
+      }
+
+      onSaved?.(
+        repeat === 'none'
+          ? `${kind.label} logged — ${draft.title.trim() || categoryById(draft.category).label}`
+          : `${kind.label} logged and scheduled ${repeat}`
+      );
     }
     onClose();
   };
@@ -214,6 +242,30 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
             />
           </Field>
         </div>
+
+        {/* Offered only when creating. Turning an existing entry into a
+            schedule retroactively raises questions about what it means for the
+            entries already logged, and the Scheduled list is the honest place
+            to set one up. */}
+        {!editing && (
+          <div>
+            <span className="block text-[12px] font-medium text-dim mb-1.5">Repeats</span>
+            <Segmented
+              size="sm"
+              value={repeat}
+              onChange={setRepeat}
+              options={[
+                { value: 'none', label: 'One-off' },
+                ...FREQUENCIES.map((f) => ({ value: f.id, label: f.label })),
+              ]}
+            />
+            {repeat !== 'none' && (
+              <p className="text-[11.5px] text-faint mt-1.5 leading-relaxed">
+                This one is logged now. The next will be offered on schedule — you confirm or skip each time.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </Sheet>
   );

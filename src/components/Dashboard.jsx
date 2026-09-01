@@ -29,6 +29,7 @@ import {
   Badge, Bar, Button, Card, CategoryDot, Delta, Empty, Icon, Money, Ring,
   SectionTitle, Stat, stagger, tooltipStyle,
 } from './ui';
+import { DueBanner } from './Scheduled';
 
 export default function Dashboard({ onNavigate }) {
   const { state } = useStore();
@@ -79,6 +80,10 @@ export default function Dashboard({ onNavigate }) {
 
   return (
     <div className="space-y-5">
+      {/* One line, not the whole queue — this screen is a summary, and the
+          review itself belongs next to the ledger it writes into. */}
+      <DueBanner onNavigate={onNavigate} />
+
       {/* ── Hero ── */}
       <Card glow sheen className="p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4 mb-5">

@@ -7,7 +7,7 @@
  * and asks the browser not to evict either.
  */
 
-import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { categoriesFor } from './data';
 import { monthKey, todayKey } from './calc';
 import * as persist from './persist';
@@ -59,6 +59,16 @@ const initialState = {
    */
   assets: [],
 
+  /**
+   * Recurring rules — entry templates with a schedule. See lib/recurring.js.
+   *
+   * Rent and subscriptions are the entries people retype twelve times a year
+   * and then stop logging altogether, which quietly makes every total wrong.
+   * Nothing here posts by itself: the app offers what is due and the user
+   * confirms or skips.
+   */
+  recurring: [],
+
   /** Free-text notes the user pins in the advisor. */
   notes: [],
 
@@ -85,6 +95,7 @@ function hydrate(stored) {
     assets: Array.isArray(stored.assets)
       ? stored.assets.map((a) => ({ ...a, history: a.history || {} }))
       : [],
+    recurring: Array.isArray(stored.recurring) ? stored.recurring : [],
     notes: Array.isArray(stored.notes) ? stored.notes : [],
     dismissed: Array.isArray(stored.dismissed) ? stored.dismissed : [],
   };
@@ -219,6 +230,101 @@ function reducer(state, action) {
         }),
       };
 
+    /* ── Recurring ── */
+
+    case 'addRecurring': {
+      const r = action.rule;
+      const rule = {
+        id: uid(),
+        kind: r.kind || 'expense',
+        category: r.category,
+        title: (r.title || '').trim() || 'Untitled',
+        note: (r.note || '').trim(),
+        amount: Math.abs(Number(r.amount) || 0),
+        frequency: r.frequency || 'monthly',
+        anchorDate: r.anchorDate || todayKey(),
+        /*
+         * A rule created from an entry that was just logged must not
+         * immediately offer that same date back. Seeding `lastResolved` with
+         * the anchor is what makes "log rent, repeat monthly" produce one entry
+         * now and the next one next month, rather than a duplicate on the spot.
+         */
+        lastResolved: r.lastResolved ?? null,
+        active: true,
+        createdAt: Date.now(),
+      };
+      return { ...state, recurring: [...state.recurring, rule] };
+    }
+
+    case 'updateRecurring':
+      return {
+        ...state,
+        recurring: state.recurring.map((r) =>
+          r.id === action.id
+            ? {
+                ...r,
+                ...action.patch,
+                amount:
+                  action.patch.amount !== undefined
+                    ? Math.abs(Number(action.patch.amount) || 0)
+                    : r.amount,
+              }
+            : r
+        ),
+      };
+
+    case 'deleteRecurring':
+      return { ...state, recurring: state.recurring.filter((r) => r.id !== action.id) };
+
+    /**
+     * Resolve a batch of due occurrences in one go.
+     *
+     * One action rather than one per row: posting six months of a missed rule
+     * as six dispatches would rewrite and persist the whole state six times,
+     * and a half-applied batch would leave rules and entries disagreeing about
+     * what had already been handled.
+     */
+    case 'resolveDue': {
+      const items = action.items || [];
+      if (!items.length) return state;
+
+      const created = [];
+      const resolvedTo = new Map();
+
+      for (const { ruleId, date, post } of items) {
+        const rule = state.recurring.find((r) => r.id === ruleId);
+        if (!rule) continue;
+
+        if (post) {
+          created.push({
+            id: uid(),
+            date,
+            kind: rule.kind,
+            category: rule.category,
+            title: rule.title,
+            note: rule.note,
+            amount: Math.abs(Number(rule.amount) || 0),
+            createdAt: Date.now(),
+            /** Marks the entry as generated, so the ledger can say where it came from. */
+            fromRule: rule.id,
+          });
+        }
+
+        // Skipped occurrences advance the marker too — that is what stops a
+        // cancelled subscription reappearing every month.
+        const prev = resolvedTo.get(ruleId);
+        if (!prev || date > prev) resolvedTo.set(ruleId, date);
+      }
+
+      return {
+        ...state,
+        entries: [...created, ...state.entries],
+        recurring: state.recurring.map((r) =>
+          resolvedTo.has(r.id) ? { ...r, lastResolved: resolvedTo.get(r.id) } : r
+        ),
+      };
+    }
+
     /* ── Advisor ── */
 
     case 'addNote':
@@ -255,6 +361,19 @@ export function StoreProvider({ children }) {
   // user never sees an empty app flash before IndexedDB resolves.
   const [state, dispatch] = useReducer(reducer, undefined, () => hydrate(persist.loadSync()));
 
+  /**
+   * True while the next state change is one we just read *from* storage rather
+   * than one the user made.
+   *
+   * Without this, adopting another tab's write immediately saves it again,
+   * which broadcasts, which makes the other tab adopt and save, and the two
+   * tabs write to storage forever — measurably, about twice a second with both
+   * sitting idle. Worse than the noise: a `load()` still in flight can land on
+   * top of an edit made a moment ago, so the loop does not just spin, it eats
+   * entries.
+   */
+  const adopting = useRef(false);
+
   // Authoritative read: whichever backend holds the newer copy wins. Skipped if
   // the user has already started typing, so a slow IDB read cannot clobber
   // fresh input.
@@ -266,18 +385,49 @@ export function StoreProvider({ children }) {
       // what stops a slow IndexedDB read from clobbering edits made in the
       // meantime: by now the mirror carries them and is the newer copy.
       const mirrorAt = persist.loadSync()?.savedAt || 0;
-      if ((stored.savedAt || 0) > mirrorAt) dispatch({ type: 'replace', state: stored });
+      if ((stored.savedAt || 0) > mirrorAt) {
+        adopting.current = true;
+        dispatch({ type: 'replace', state: stored });
+      }
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Persist every change. Debounced inside `persist`, so typing an amount does
-  // not open an IndexedDB transaction per keystroke.
+  // Persist every change the *user* makes. Debounced inside `persist`, so typing
+  // an amount does not open an IndexedDB transaction per keystroke. A state that
+  // came from storage is skipped — writing it back is what starts the echo.
   useEffect(() => {
+    if (adopting.current) {
+      adopting.current = false;
+      return;
+    }
     persist.save(state);
   }, [state]);
+
+  /*
+   * Adopt writes made in another tab.
+   *
+   * Two tabs each hold the whole state and each save the whole state, so
+   * without this the second tab to write wins and the first tab's entries
+   * vanish with no error. On hearing about a newer write we re-read storage
+   * rather than trusting the message, so there is still exactly one definition
+   * of which copy is authoritative — the one in `persist.load`.
+   *
+   * The `savedAt` comparison also covers the case that matters most: a message
+   * that arrives while this tab has an unsaved edit in flight is ignored,
+   * because our own pending write will be the newer one.
+   */
+  useEffect(() =>
+    persist.watchOtherTabs(() => {
+      persist.load().then((stored) => {
+        if (stored && (stored.savedAt || 0) > persist.lastWriteAt()) {
+          adopting.current = true;
+          dispatch({ type: 'replace', state: stored });
+        }
+      });
+    }), []);
 
   // A tab being hidden or closed is the moment a debounced write would be lost.
   useEffect(() => {

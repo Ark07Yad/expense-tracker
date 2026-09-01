@@ -15,6 +15,7 @@ import { KINDS, categoriesFor, categoryById, kindById } from '../lib/data';
 import { addDays, dayLabel, formatMoney, parseKey, todayKey } from '../lib/calc';
 import { totalsOf } from '../lib/useFinance';
 import EntrySheet from './EntrySheet';
+import { DueQueue, ScheduledList } from './Scheduled';
 import {
   Badge, Button, Card, CategoryDot, Empty, Icon, IconButton, Input, Money,
   SectionTitle, Segmented, Select,
@@ -111,6 +112,9 @@ export default function Ledger({ date, setDate, toast }) {
 
   return (
     <div className="space-y-5">
+      {/* Due first: it is the one thing on this screen that is waiting on you. */}
+      <DueQueue toast={toast} />
+
       {/* ── Day picker ── */}
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3 mb-4">
@@ -334,6 +338,8 @@ export default function Ledger({ date, setDate, toast }) {
           </div>
         )}
       </Card>
+
+      <ScheduledList toast={toast} />
 
       <EntrySheet
         open={composerOpen}

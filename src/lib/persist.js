@@ -173,6 +173,51 @@ let writeTimer = null;
 let pending = null;
 let lastSnapshotDay = null;
 
+/* ─────────────────────────── Cross-tab coordination ─────────────────────── */
+
+/**
+ * Every tab writes the whole state object, so without coordination two open
+ * tabs silently overwrite each other: log an entry in one, and the other's next
+ * save — carrying its older copy — wipes it. Nothing errors, the entry is just
+ * gone.
+ *
+ * The channel carries only a timestamp, never the state. A tab that hears about
+ * a newer write re-reads from storage and decides for itself, which keeps one
+ * definition of "which copy wins" instead of two.
+ */
+const CHANNEL = 'cointrack.sync';
+
+let channel = null;
+function getChannel() {
+  if (channel !== null) return channel;
+  try {
+    channel = typeof BroadcastChannel === 'undefined' ? false : new BroadcastChannel(CHANNEL);
+  } catch {
+    channel = false;
+  }
+  return channel;
+}
+
+/** The last write this tab made, so it can ignore the echo of its own message. */
+let lastLocalWrite = 0;
+
+export const lastWriteAt = () => lastLocalWrite;
+
+/**
+ * Subscribe to writes from other tabs. `onRemoteWrite(savedAt)` is called only
+ * for writes newer than this tab's own.
+ */
+export function watchOtherTabs(onRemoteWrite) {
+  const ch = getChannel();
+  if (!ch) return () => {};
+  const handler = (event) => {
+    const at = event?.data?.savedAt;
+    if (typeof at === 'number' && at > lastLocalWrite) onRemoteWrite(at);
+  };
+  ch.addEventListener('message', handler);
+  return () => ch.removeEventListener('message', handler);
+}
+
 /**
  * Persist to both backends. Debounced, because state changes on every
  * keystroke and IndexedDB transactions are not free.
@@ -195,6 +240,17 @@ export function save(state, { immediate = false } = {}) {
 
     idbSet(STATE_KEY, payload).catch(() => {});
     maybeSnapshot(payload);
+
+    lastLocalWrite = payload.savedAt;
+    const ch = getChannel();
+    if (ch) {
+      try {
+        // Not Window.postMessage — a BroadcastChannel has no target origin, and
+        // it is already scoped to this origin by definition.
+        // eslint-disable-next-line unicorn/require-post-message-target-origin
+        ch.postMessage({ savedAt: payload.savedAt });
+      } catch { /* a closed channel is not worth failing a save over */ }
+    }
   };
 
   if (immediate) {
