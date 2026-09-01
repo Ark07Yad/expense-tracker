@@ -26,5 +26,27 @@
     "wrangler": "^4.127.1"
   },
   "license": "MIT",
-  "description": "Expenses, earnings, savings and investments \u2014 visualised by week, month, quarter and year. Local-first, nothing leaves the browser."
+  "description": "Expenses, earnings, savings and investments \u2014 visualised by week, month, quarter and year. Local-first, nothing leaves the browser.",
+  "homepage": "https://cointrack.ark07yad.workers.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ark07Yad/expense-tracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ark07Yad/expense-tracker/issues"
+  },
+  "keywords": [
+    "expense-tracker",
+    "personal-finance",
+    "budgeting",
+    "net-worth",
+    "local-first",
+    "react",
+    "vite",
+    "recharts",
+    "cloudflare-workers"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }
