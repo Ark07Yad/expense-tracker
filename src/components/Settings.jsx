@@ -12,6 +12,7 @@ import { CURRENCIES, categoriesFor } from '../lib/data';
 import { buildDemo } from '../lib/demo';
 import { formatMoney, formatPercent, todayKey } from '../lib/calc';
 import * as persist from '../lib/persist';
+import ImportSheet from './ImportSheet';
 import {
   Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money,
   MoneyInput, NumberInput, SectionTitle, Select, Sheet,
@@ -23,6 +24,7 @@ export default function Settings({ toast }) {
   const fileRef = useRef(null);
   const [storage, setStorage] = useState(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
 
   useEffect(() => {
     persist.storageStatus().then(setStorage);
@@ -289,6 +291,10 @@ export default function Settings({ toast }) {
             Restore from file
           </Button>
           <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={importData} />
+          <Button variant="ghost" size="sm" onClick={() => setCsvOpen(true)}>
+            <Icon name="ledger" className="size-3.5" />
+            Import CSV
+          </Button>
           <Button variant="ghost" size="sm" onClick={loadDemo}>
             <Icon name="spark" className="size-3.5" />
             Load sample data
@@ -304,6 +310,8 @@ export default function Settings({ toast }) {
           keep them.
         </p>
       </Card>
+
+      <ImportSheet open={csvOpen} onClose={() => setCsvOpen(false)} onSaved={toast} />
 
       <Sheet
         open={resetOpen}

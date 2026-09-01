@@ -398,6 +398,9 @@ function EntryRow({ entry, index, onEdit, dispatch, toast }) {
         <div className="text-[13.5px] font-medium truncate">{entry.title}</div>
         <div className="text-[11.5px] text-faint truncate">
           {cat.label}
+          {/* What was actually paid, where that differs from the home currency
+              the ledger is kept in. */}
+          {entry.fx ? ` · ${formatMoney(entry.fx.amount, entry.fx.currency)}` : ''}
           {entry.note ? ` · ${entry.note}` : ''}
         </div>
       </button>

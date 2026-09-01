@@ -69,6 +69,13 @@ const initialState = {
    */
   recurring: [],
 
+  /**
+   * Savings goals. Progress comes from saving entries tagged with `goalId`,
+   * not from a category — a shared "Goal savings" category covering three
+   * different goals would make every figure on that screen a guess.
+   */
+  goals: [],
+
   /** Free-text notes the user pins in the advisor. */
   notes: [],
 
@@ -96,6 +103,7 @@ function hydrate(stored) {
       ? stored.assets.map((a) => ({ ...a, history: a.history || {} }))
       : [],
     recurring: Array.isArray(stored.recurring) ? stored.recurring : [],
+    goals: Array.isArray(stored.goals) ? stored.goals : [],
     notes: Array.isArray(stored.notes) ? stored.notes : [],
     dismissed: Array.isArray(stored.dismissed) ? stored.dismissed : [],
   };
@@ -135,15 +143,26 @@ function reducer(state, action) {
     /* ── Ledger ── */
 
     case 'addEntry': {
+      const e = action.entry;
       const entry = {
         id: uid(),
-        date: action.entry.date || todayKey(),
-        kind: action.entry.kind || 'expense',
-        category: action.entry.category,
-        title: (action.entry.title || '').trim() || 'Untitled',
-        note: (action.entry.note || '').trim(),
-        amount: Math.abs(Number(action.entry.amount) || 0),
+        date: e.date || todayKey(),
+        kind: e.kind || 'expense',
+        category: e.category,
+        title: (e.title || '').trim() || 'Untitled',
+        note: (e.note || '').trim(),
+        amount: Math.abs(Number(e.amount) || 0),
         createdAt: Date.now(),
+        /*
+         * The optional fields are listed rather than spread, so a stray key
+         * from a draft cannot become part of the stored shape. They do have to
+         * be listed though — omitting them here is a silent drop: the composer
+         * shows the goal selected, and the entry is saved without it.
+         */
+        ...(e.kind === 'saving' && e.goalId ? { goalId: e.goalId } : {}),
+        ...(e.fx && Number(e.fx.amount) > 0 && Number(e.fx.rate) > 0
+          ? { fx: { currency: e.fx.currency, amount: Number(e.fx.amount), rate: Number(e.fx.rate) } }
+          : {}),
       };
       return { ...state, entries: [entry, ...state.entries] };
     }
@@ -164,6 +183,31 @@ function reducer(state, action) {
             : e
         ),
       };
+
+    /**
+     * Bulk import. One action, because writing a few hundred entries as
+     * individual dispatches would re-render and re-persist the whole state
+     * once per row.
+     */
+    case 'importEntries': {
+      const rows = action.entries || [];
+      if (!rows.length) return state;
+      const now = Date.now();
+      const created = rows.map((r, i) => ({
+        id: uid(),
+        date: r.date,
+        kind: r.kind || 'expense',
+        category: r.category,
+        title: (r.title || '').trim() || 'Imported',
+        note: (r.note || '').trim(),
+        amount: Math.abs(Number(r.amount) || 0),
+        // Preserve file order within the same millisecond, so a statement's own
+        // sequence survives into the ledger.
+        createdAt: now + i,
+        imported: true,
+      }));
+      return { ...state, entries: [...created, ...state.entries] };
+    }
 
     case 'deleteEntry':
       return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
@@ -324,6 +368,51 @@ function reducer(state, action) {
         ),
       };
     }
+
+    /* ── Goals ── */
+
+    case 'addGoal': {
+      const g = action.goal;
+      return {
+        ...state,
+        goals: [
+          ...state.goals,
+          {
+            id: uid(),
+            name: (g.name || '').trim() || 'Untitled goal',
+            target: Math.max(0, Number(g.target) || 0),
+            /** Money already set aside before the goal was created here. */
+            opening: Math.max(0, Number(g.opening) || 0),
+            deadline: g.deadline || null,
+            note: (g.note || '').trim(),
+            createdAt: Date.now(),
+            archived: false,
+          },
+        ],
+      };
+    }
+
+    case 'updateGoal':
+      return {
+        ...state,
+        goals: state.goals.map((g) => (g.id === action.id ? { ...g, ...action.patch } : g)),
+      };
+
+    /**
+     * Deleting a goal leaves its contributions alone.
+     *
+     * Those are real savings that really happened; erasing them because the
+     * goal was abandoned would silently change the savings rate for every past
+     * month. They simply become untagged.
+     */
+    case 'deleteGoal':
+      return {
+        ...state,
+        goals: state.goals.filter((g) => g.id !== action.id),
+        entries: state.entries.map((e) =>
+          e.goalId === action.id ? { ...e, goalId: undefined } : e
+        ),
+      };
 
     /* ── Advisor ── */
 

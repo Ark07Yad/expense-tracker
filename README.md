@@ -29,10 +29,10 @@ say.
 |---|---|
 | **Home** | This month at a glance: a spend dial against your budgets with a pace marker, in/out/saved with change against last month, the three most urgent suggestions, a 30-day spend trend, the category mix, budget bars and net worth. |
 | **Ledger** | The daily log. A fourteen-day rhythm strip, one day's entries with running totals, and a searchable archive of everything grouped by date. Each entry has a title, an amount, a category, a date and an optional description. Recurring entries are offered here for confirmation, and their schedules are managed at the bottom. |
-| **Trends** | The same four questions at four zoom levels — week, month, quarter, year — with a cash-flow chart, a running-total view against a paced budget, a stacked category-mix view, a breakdown donut, biggest movements against the previous period, a per-category table, a daily-spend heatmap and a side-by-side comparison table. |
-| **Invest** | Holdings and net worth. You enter what each holding is worth at the end of a month and what you paid in that month; the chart plots value against contributions so growth is separable from deposits. Includes allocation by asset class, per-holding gain, a stale-value warning and a contribution history table. |
+| **Trends** | The same four questions at four zoom levels — week, month, quarter, year — with a cash-flow chart, a running-total view against a paced budget, a stacked category-mix view, a breakdown donut, biggest movements against the previous period, a per-category table, a daily-spend heatmap and a side-by-side comparison table. A category filter narrows the whole page at once. |
+| **Invest** | Savings goals and holdings. A goal is a target, optionally with a date, and progress comes from savings entries tagged to it — the figure that matters is what you would have to set aside per month from here, against what you have actually been putting aside. Below that: what each holding is worth and what you paid in, plotted separately so growth is distinguishable from deposits, with allocation, per-holding gain, stale-value warnings and a contribution history. |
 | **Advice** | The suggestion box. Pick a section — the whole picture, spending, budgets, income, savings, investments, or a single category — and get rules applied to your own entries, plus a place to keep your own notes. |
-| **Settings** | Profile, currency, budgets, and your data: export, restore, sample data, erase. |
+| **Settings** | Profile, currency, budgets, and your data: export, restore, CSV import, sample data, erase. |
 
 ## How it is put together
 
@@ -46,6 +46,8 @@ src/
   lib/
     calc.js        dates, period ranges, bucketing, money formatting
     recurring.js   schedules for repeating entries
+    goals.js       savings targets and what they require per month
+    csv.js         bank-statement parsing, mapping and category guessing
     data.js        the three ledger kinds, categories, asset classes, currencies
     useFinance.js  every derived number, as pure functions plus thin hooks
     insights.js    the rule engine behind the advisor
@@ -88,6 +90,21 @@ only thing this app has going for it is that its numbers are ones you put there.
 Skipping advances the schedule exactly as posting does, so a subscription you
 cancelled stops asking.
 
+**A foreign payment is provenance, not a second unit.** The amount on an entry
+is always in your home currency, converted once when it is logged, with the
+original amount and the rate you got stored alongside it. Every total, budget,
+chart and rule therefore needs no knowledge of currencies at all. Making the
+ledger genuinely multi-unit would mean converting inside every aggregation, at
+the cost of a rate lookup this app has no honest way to perform offline — and
+storing the rate at entry time means a later change never rewrites history.
+
+**The CSV importer guesses, then shows its guesses.** Bank exports agree on
+nothing: delimiter, date order, decimal separator, or which sign means money
+leaving. The two most dangerous — date order and sign convention — are surfaced
+as controls rather than assumed, because both fail silently. A wrong date order
+shifts a year of history; a wrong sign turns spending into income. Where the
+evidence is genuinely ambiguous the parser says so instead of picking.
+
 **Two tabs do not fight.** Each tab holds and saves the whole state, so without
 coordination the second one to write silently wipes the first one's entries. A
 `BroadcastChannel` carries only a timestamp; a tab that hears about a newer write
@@ -101,8 +118,8 @@ infinite write loop between the two tabs.
 npm test
 ```
 
-127 tests over the pure engines — dates and period boundaries, aggregation,
-schedules, and the advisor's rules. They lean on properties rather than golden
+180 tests over the pure engines — dates and period boundaries, aggregation,
+schedules, goals, CSV parsing, and the advisor's rules. They lean on properties rather than golden
 values where they can: the chart buckets must sum to the headline the screen
 prints, a category that vanished must still count as a movement, and a holding
 nobody revalued must not drag net worth to zero. The advisor suite also pins the

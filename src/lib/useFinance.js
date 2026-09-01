@@ -222,16 +222,32 @@ export function movers(current, previous, limit = 4) {
     .slice(0, limit);
 }
 
-/** Everything one period view needs, in one object. */
-export function computeFinance(state, period, offset = 0, anchor = todayKey()) {
+/**
+ * Everything one period view needs, in one object.
+ *
+ * `categoryFilter` narrows the whole computation rather than the display, so
+ * the totals, the comparison against last period, the buckets and the movers
+ * all describe the same filtered slice. Filtering only at render time is how a
+ * chart ends up showing one category against a headline for all of them.
+ *
+ * It is deliberately the *last* parameter: inserting it before `anchor` would
+ * have silently re-read every existing caller's anchor as a category filter,
+ * which fails by returning plausible-looking empty results rather than by
+ * throwing.
+ */
+export function computeFinance(state, period, offset = 0, anchor = todayKey(), categoryFilter = null) {
   const opts = { anchor, weekStart: state.profile.weekStart ?? 1 };
   const range = periodRange(period, offset, opts);
   const prevRange = periodRange(period, offset - 1, opts);
 
-  const inRange = entriesInRange(state.entries, range).sort(
+  const all = categoryFilter
+    ? state.entries.filter((e) => e.category === categoryFilter)
+    : state.entries;
+
+  const inRange = entriesInRange(all, range).sort(
     (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.createdAt - a.createdAt)
   );
-  const inPrev = entriesInRange(state.entries, prevRange);
+  const inPrev = entriesInRange(all, prevRange);
 
   const totals = totalsOf(inRange);
   const prevTotals = totalsOf(inPrev);
@@ -243,6 +259,7 @@ export function computeFinance(state, period, offset = 0, anchor = todayKey()) {
   return {
     period,
     offset,
+    categoryFilter: categoryFilter || null,
     range,
     prevRange,
     label: periodLabel(period, range),
@@ -410,9 +427,12 @@ function monthsApart(a, b) {
 
 /* ─────────────────────────────────  Hooks  ───────────────────────────────── */
 
-export function useFinance(period, offset = 0) {
+export function useFinance(period, offset = 0, categoryFilter = null) {
   const { state } = useStore();
-  return useMemo(() => computeFinance(state, period, offset), [state, period, offset]);
+  return useMemo(
+    () => computeFinance(state, period, offset, todayKey(), categoryFilter),
+    [state, period, offset, categoryFilter]
+  );
 }
 
 export function useInvestments(months = 12) {

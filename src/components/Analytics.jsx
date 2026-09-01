@@ -16,9 +16,10 @@ import {
 import { useStore } from '../lib/store';
 import { useFinance } from '../lib/useFinance';
 import { PERIODS, addDays, dayLabel, formatMoney, formatPercent, parseKey, todayKey } from '../lib/calc';
+import { categoriesFor, categoryById } from '../lib/data';
 import {
-  Badge, Bar, Button, Card, CategoryDot, Delta, Empty, IconButton, Money,
-  SectionTitle, Segmented, Stat, stagger, tooltipStyle,
+  Badge, Bar, Button, Card, CategoryDot, Delta, Empty, Icon, IconButton, Money,
+  SectionTitle, Segmented, Select, Stat, stagger, tooltipStyle,
 } from './ui';
 
 const VIEWS = [
@@ -32,7 +33,8 @@ export default function Analytics({ onNavigate }) {
   const [period, setPeriod] = useState('month');
   const [offset, setOffset] = useState(0);
   const [view, setView] = useState('flow');
-  const f = useFinance(period, offset);
+  const [catFilter, setCatFilter] = useState('all');
+  const f = useFinance(period, offset, catFilter === 'all' ? undefined : catFilter);
   const cur = state.profile.currency;
 
   const budgetTotal = f.budgets.reduce((s, b) => s + b.cap, 0);
@@ -88,6 +90,34 @@ export default function Analytics({ onNavigate }) {
               </Button>
             )}
           </div>
+        </div>
+
+        {/* One filter, applied to every chart below rather than to a single
+            card — "how has dining moved over the year" is a whole-page
+            question, and answering it in one place beats a filter per widget. */}
+        <div className="flex flex-wrap items-center gap-2.5 mt-4">
+          <div className="w-full sm:w-64">
+            <Select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+              <option value="all">Every category</option>
+              {categoriesFor('expense').map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </Select>
+          </div>
+          {catFilter !== 'all' && (
+            <Badge tone="brand">
+              <Icon name="filter" className="size-3" />
+              Showing {categoryById(catFilter).label} only
+            </Badge>
+          )}
+          {catFilter !== 'all' && (
+            <button
+              onClick={() => setCatFilter('all')}
+              className="text-[12px] text-dim hover:text-[color:var(--text)] transition-colors"
+            >
+              Clear
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-4">

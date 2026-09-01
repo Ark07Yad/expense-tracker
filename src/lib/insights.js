@@ -23,6 +23,7 @@
  */
 
 import { computeFinance, computeInvestments } from './useFinance';
+import { goalsWithProgress } from './goals';
 import { categoryById } from './data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, todayKey } from './calc';
 
@@ -594,6 +595,59 @@ export function buildSuggestions(state, section = 'overall') {
         title: `You saved in ${savedMonths} of the last ${funded.length} months`,
         body: 'Irregular saving usually means it happens with whatever is left, which is rarely much. A fixed amount on payday is smaller but adds up to more.',
         priority: 3,
+      });
+    }
+
+    const goals = goalsWithProgress(state, todayKey());
+    const behind = goals.filter((g) => g.onTrack === false);
+    const overdue = goals.filter((g) => g.overdue);
+    const reached = goals.filter((g) => g.complete);
+
+    if (overdue.length) {
+      add({
+        id: 'goals-overdue',
+        tone: 'warn',
+        icon: 'clock',
+        title: `${overdue.length} ${overdue.length === 1 ? 'goal is' : 'goals are'} past the date`,
+        body: `${overdue.map((g) => `${g.name} (${money(g.remaining)} short)`).join(', ')}. Either the date or the amount needs to move — leaving both is how a goal quietly becomes a wish.`,
+        action: { label: 'Open goals', to: 'investments' },
+        priority: 2,
+      });
+    }
+
+    if (behind.length) {
+      const worst = behind.sort((a, b) => b.requiredPerMonth - a.requiredPerMonth)[0];
+      add({
+        id: `goal-behind-${worst.id}`,
+        tone: 'warn',
+        icon: 'target',
+        title: `${worst.name} needs ${money(worst.requiredPerMonth)} a month`,
+        body: `You have been putting aside about ${money(worst.perMonthRecent)} a month lately, which lands short of ${money(worst.target)} by ${new Date(`${worst.deadline}T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}. Moving the date is as valid a fix as finding the difference.`,
+        action: { label: 'Open goals', to: 'investments' },
+        priority: 2,
+      });
+    }
+
+    if (reached.length) {
+      add({
+        id: 'goals-reached',
+        tone: 'good',
+        icon: 'check',
+        title: `${reached.length} ${reached.length === 1 ? 'goal' : 'goals'} reached`,
+        body: `${reached.map((g) => g.name).join(', ')}. Worth deciding what that money is doing next, rather than letting it drift back into spending.`,
+        priority: 5,
+      });
+    }
+
+    if (!goals.length && t.saving > 0) {
+      add({
+        id: 'goals-none',
+        tone: 'info',
+        icon: 'target',
+        title: 'Saving, but not toward anything named',
+        body: `${money(t.saving)} set aside this month with no goal attached. A target and a date turn a habit into something you can tell is working.`,
+        action: { label: 'Set a goal', to: 'investments' },
+        priority: 4,
       });
     }
 

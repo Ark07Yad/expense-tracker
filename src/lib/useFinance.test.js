@@ -327,6 +327,24 @@ describe('computeFinance', () => {
     expect(future.totals.count).toBe(0);
   });
 
+  it('narrows the whole computation when a category filter is given', () => {
+    // Totals, the previous-period comparison and the buckets must all describe
+    // the same slice — filtering at render time is how a chart ends up showing
+    // one category against a headline for all of them.
+    const only = computeFinance(state, 'month', 0, '2020-06-15', 'dining');
+    expect(only.categoryFilter).toBe('dining');
+    expect(only.totals.expense).toBe(400);
+    expect(only.totals.count).toBe(1);
+    expect(only.prevTotals.expense).toBe(200);
+    expect(only.series.reduce((n, r) => n + r.expense, 0)).toBe(400);
+  });
+
+  it('keeps anchor before the filter, so old positional calls still work', () => {
+    const anchored = computeFinance(state, 'month', 0, '2020-06-15');
+    expect(anchored.range.start).toBe('2020-06-01');
+    expect(anchored.categoryFilter).toBeNull();
+  });
+
   it('survives a completely empty ledger', () => {
     const empty = computeFinance(baseState(), 'month', 0, '2020-06-15');
     expect(empty.totals.count).toBe(0);

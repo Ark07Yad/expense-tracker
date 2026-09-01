@@ -13,11 +13,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
-import { KINDS, QUICK_ADD, categoriesFor, categoryById, kindById } from '../lib/data';
+import { CURRENCIES, KINDS, QUICK_ADD, categoriesFor, categoryById, kindById } from '../lib/data';
 import { FREQUENCIES } from '../lib/recurring';
-import { dayLabel, todayKey } from '../lib/calc';
+import { goalsWithProgress } from '../lib/goals';
+import { dayLabel, formatMoney, todayKey } from '../lib/calc';
 import {
-  Button, CategoryDot, Field, Icon, Input, MoneyInput, Segmented, Sheet, Textarea, mix, toneColor,
+  Button, CategoryDot, Field, Icon, Input, MoneyInput, NumberInput, Segmented, Select,
+  Sheet, Textarea, mix, toneColor,
 } from './ui';
 
 const blank = (date) => ({
@@ -27,6 +29,19 @@ const blank = (date) => ({
   note: '',
   amount: null,
   date: date || todayKey(),
+  goalId: undefined,
+  /**
+   * Set only when the money was actually spent in another currency:
+   * { currency, amount, rate }.
+   *
+   * `amount` on the entry itself always stays in the home currency, converted
+   * once here. Every total, budget, chart and rule therefore needs no knowledge
+   * of currencies at all — this block is provenance, not a second unit. Making
+   * the ledger genuinely multi-unit would mean converting inside every
+   * aggregation, at the cost of a rate lookup the app has no way to perform
+   * offline and honestly.
+   */
+  fx: null,
 });
 
 export default function EntrySheet({ open, onClose, editing = null, defaultDate, onSaved }) {
@@ -35,6 +50,7 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
   const [error, setError] = useState('');
   /** 'none', or a frequency id — creating a schedule alongside this entry. */
   const [repeat, setRepeat] = useState('none');
+  const [fxOpen, setFxOpen] = useState(false);
 
   // Re-seed whenever the sheet opens, so a cancelled edit never leaks into the
   // next entry and the date follows whichever day the ledger is showing.
@@ -43,18 +59,52 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
     setError('');
     setRepeat('none');
     setDraft(editing ? { ...editing } : blank(defaultDate));
+    setFxOpen(!!editing?.fx);
   }, [open, editing, defaultDate]);
 
   const kind = kindById(draft.kind);
   const cats = categoriesFor(draft.kind);
+  const goals = useMemo(() => goalsWithProgress(state, todayKey()).filter((g) => !g.complete), [state]);
   const patch = (p) => setDraft((d) => ({ ...d, ...p }));
+
+  const home = state.profile.currency;
+  const fx = draft.fx;
+
+  /** Editing either the foreign amount or the rate recomputes the home amount. */
+  const patchFx = (p) => {
+    setDraft((d) => {
+      const next = { currency: 'USD', amount: null, rate: null, ...d.fx, ...p };
+      const converted = Number(next.amount) * Number(next.rate);
+      return {
+        ...d,
+        fx: next,
+        amount: Number.isFinite(converted) && converted > 0 ? Math.round(converted * 100) / 100 : d.amount,
+      };
+    });
+  };
+
+  const toggleFx = () => {
+    if (fxOpen) {
+      setFxOpen(false);
+      patch({ fx: null });
+    } else {
+      setFxOpen(true);
+      patchFx({ currency: home === 'USD' ? 'EUR' : 'USD' });
+    }
+  };
 
   // Switching kind has to move the category too — "Groceries" is not a valid
   // kind of earning, and leaving it selected would silently file the entry
   // under a category that view never shows.
   const setKind = (id) => {
     const next = categoriesFor(id);
-    patch({ kind: id, category: next.some((c) => c.id === draft.category) ? draft.category : next[0].id });
+    patch({
+      kind: id,
+      category: next.some((c) => c.id === draft.category) ? draft.category : next[0].id,
+      // Only a saving can belong to a goal. Leaving the tag on after a switch
+      // would credit a goal with an expense.
+      goalId: id === 'saving' ? draft.goalId : undefined,
+    });
   };
 
   const recent = useMemo(() => {
@@ -158,9 +208,76 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
         </div>
 
         <Field label="Amount">
-          <MoneyInput value={draft.amount} onChange={(v) => patch({ amount: v })} autoFocus />
+          <MoneyInput
+            value={draft.amount}
+            onChange={(v) => patch({ amount: v, fx: null })}
+            autoFocus
+            disabled={fxOpen}
+          />
         </Field>
         {error && <p className="text-[12px] text-bad -mt-2">{error}</p>}
+
+        <div>
+          <button
+            onClick={toggleFx}
+            className="inline-flex items-center gap-1.5 text-[12px] text-dim hover:text-[color:var(--text)] transition-colors"
+          >
+            <Icon name={fxOpen ? 'minus' : 'plus'} className="size-3.5" />
+            {fxOpen ? 'Not a foreign payment' : 'Paid in another currency'}
+          </button>
+
+          {fxOpen && fx && (
+            <div className="surface rounded-2xl p-3 mt-2 space-y-3">
+              <div className="grid grid-cols-3 gap-2.5">
+                <Field label="Currency">
+                  <Select
+                    value={fx.currency}
+                    onChange={(e) => patchFx({ currency: e.target.value })}
+                    className="py-2 text-[13px]"
+                  >
+                    {CURRENCIES.filter((c) => c.code !== home).map((c) => (
+                      <option key={c.code} value={c.code}>{c.code}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Paid">
+                  <NumberInput
+                    value={fx.amount}
+                    onChange={(v) => patchFx({ amount: v })}
+                    min={0}
+                    allowEmpty
+                    placeholder="0"
+                    className="py-2 text-[13px] text-right tabular"
+                  />
+                </Field>
+                <Field label="Rate">
+                  <NumberInput
+                    value={fx.rate}
+                    onChange={(v) => patchFx({ rate: v })}
+                    min={0}
+                    allowEmpty
+                    placeholder="0"
+                    className="py-2 text-[13px] text-right tabular"
+                  />
+                </Field>
+              </div>
+              <p className="text-[11.5px] text-faint leading-relaxed">
+                {Number(draft.amount) > 0 ? (
+                  <>
+                    Logged as{' '}
+                    <span className="font-medium text-[color:var(--text)]">
+                      {formatMoney(draft.amount, home)}
+                    </span>{' '}
+                    at {fx.rate || 0} {home} per {fx.currency}. The rate is stored with the entry, so a
+                    later change never rewrites history.
+                  </>
+                ) : (
+                  <>Enter the amount you paid and the rate you got. Your ledger stays in {home}.</>
+                )}
+              </p>
+            </div>
+          )}
+        </div>
 
         {!editing && (
           <div className="flex gap-1.5 flex-wrap">
@@ -199,6 +316,39 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
             })}
           </div>
         </div>
+
+        {/* Only savings can be tagged, and only when there is something to tag
+            to — an empty picker would just be a question with no answers. */}
+        {draft.kind === 'saving' && goals.length > 0 && (
+          <div>
+            <span className="block text-[12px] font-medium text-dim mb-1.5">Toward a goal</span>
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => patch({ goalId: undefined })}
+                className={`px-2.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all active:scale-95 border
+                            ${!draft.goalId ? 'bg-brand-500/18 border-brand-400/50 text-brandy' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+              >
+                General savings
+              </button>
+              {goals.map((g) => {
+                const active = draft.goalId === g.id;
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => patch({ goalId: g.id })}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12.5px] font-medium
+                                transition-all active:scale-95 border
+                                ${active ? 'bg-sky-500/18 border-sky-400/50 text-save' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+                  >
+                    <Icon name="target" className="size-3.5" />
+                    {g.name}
+                    <span className="text-faint">{formatMoney(g.remaining, state.profile.currency, { compact: true })} to go</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="relative">
           <Field label="Title" hint="A few words you will recognise in three months.">

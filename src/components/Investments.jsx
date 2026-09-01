@@ -21,6 +21,7 @@ import { useStore } from '../lib/store';
 import { useInvestments } from '../lib/useFinance';
 import { ASSET_CLASSES, assetClassById } from '../lib/data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, monthLabel, todayKey } from '../lib/calc';
+import Goals from './Goals';
 import {
   Badge, Bar, Button, Card, CategoryDot, ConfirmButton, Empty, Field, Icon,
   IconButton, Input, Money, MoneyInput, SectionTitle, Select, Sheet, Stat,
@@ -136,6 +137,11 @@ export default function Investments({ toast }) {
           </>
         )}
       </Card>
+
+      {/* Goals sit above holdings: money you are building toward, then money
+          you already hold. Both belong on this screen; neither belongs in the
+          other's card. */}
+      <Goals toast={toast} />
 
       {!inv.empty && (
         <>
