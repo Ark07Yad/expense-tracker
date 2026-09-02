@@ -9,3 +9,6 @@ dist
 
 # Local working notes — deliberately not published
 PROJECT.md
+test-results
+playwright-report
+.playwright

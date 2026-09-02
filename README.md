@@ -165,7 +165,9 @@ themselves through a live region.
 ## Tests
 
 ```bash
-npm test
+npm test          # 253 unit and component tests
+npm run test:e2e  # 17 end-to-end journeys
+npm run test:all  # both
 ```
 
 253 tests. The engines run in node — dates and period boundaries, aggregation,
@@ -183,6 +185,16 @@ you are using a keyboard; a shortcut that fires while you are typing loses the
 entry you were writing; a form that shows a goal selected and saves without it
 looks correct until you check the number weeks later. Several are regressions
 that actually happened here, kept as tests so they cannot happen twice.
+
+The end-to-end tests run Playwright against the **built** app served by `vite
+preview`, not the dev server — the code-split chunks, the generated headers and
+the service worker only exist in a production build, and two of them have
+already been the subject of real bugs. There are deliberately few of them, and
+each is a whole journey: setting up and logging a first entry, data surviving a
+reload and a second tab, every screen and all four period levels rendering
+without throwing, and the things only a real browser can show at all — an
+export that produces an actual file, a CSV picked from disk, a receipt stored in
+IndexedDB, and the app still running with the network switched off.
 
 ## What the advisor does and does not do
 

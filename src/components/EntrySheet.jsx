@@ -317,7 +317,7 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
         </div>
 
         {!editing && (
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Quick add">
             {QUICK_ADD.map((q, i) => (
               <button
                 key={i}
@@ -333,8 +333,10 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
         )}
 
         <div>
-          <span className="block text-[12px] font-medium text-dim mb-1.5">Category</span>
-          <div className="flex gap-1.5 flex-wrap">
+          <span className="block text-[12px] font-medium text-dim mb-1.5" id="entry-category-label">
+            Category
+          </span>
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-labelledby="entry-category-label">
             {cats.map((c) => {
               const active = draft.category === c.id;
               return (
@@ -358,8 +360,10 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
             to — an empty picker would just be a question with no answers. */}
         {draft.kind === 'saving' && goals.length > 0 && (
           <div>
-            <span className="block text-[12px] font-medium text-dim mb-1.5">Toward a goal</span>
-            <div className="flex gap-1.5 flex-wrap">
+            <span className="block text-[12px] font-medium text-dim mb-1.5" id="entry-goal-label">
+              Toward a goal
+            </span>
+            <div className="flex gap-1.5 flex-wrap" role="group" aria-labelledby="entry-goal-label">
               <button
                 onClick={() => patch({ goalId: undefined })}
                 className={`px-2.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all active:scale-95 border

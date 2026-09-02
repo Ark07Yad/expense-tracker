@@ -4,10 +4,15 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // Test files are transformed outside the React plugin's usual path, where the
-  // default is the classic runtime — which needs React in scope and fails with
-  // "React is not defined". The app's own files are unaffected either way.
-  esbuild: { jsx: 'automatic', jsxImportSource: 'react' },
+  /*
+   * Only while running tests.
+   *
+   * Vitest transforms test files outside the React plugin's usual path, where
+   * the default is the classic JSX runtime — which needs React in scope and
+   * fails with "React is not defined". The production build uses oxc, which
+   * warns if esbuild options are also set, so this stays out of its way.
+   */
+  ...(process.env.VITEST ? { esbuild: { jsx: 'automatic', jsxImportSource: 'react' } } : {}),
   server: { port: 5181 },
   build: {
     rollupOptions: {
