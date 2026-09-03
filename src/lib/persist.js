@@ -129,7 +129,11 @@ export async function putFile(id, blob) {
    * restriction anywhere, and the Blob is trivially rebuilt on the way out.
    */
   const buffer = await blob.arrayBuffer();
-  return idbSet(id, { buffer, type: blob.type || 'application/octet-stream', size: buffer.byteLength }, FILES);
+  return idbSet(
+    id,
+    { buffer, type: blob.type || 'application/octet-stream', size: buffer.byteLength, at: Date.now() },
+    FILES
+  );
 }
 
 export async function getFile(id) {
@@ -191,18 +195,48 @@ export async function fileUsage() {
  * swept up afterwards, which is safe because a blob nothing points at is
  * unreachable either way.
  */
-export async function pruneFiles(keepIds) {
+/**
+ * How long a blob is protected from the sweep regardless of references.
+ *
+ * A receipt is attached *before* the entry that references it is saved, so for
+ * as long as the form is open the blob is legitimately an orphan. Without this
+ * grace period the sweep deletes it mid-compose and the entry saves pointing at
+ * nothing — visible only later, as a receipt that will not open.
+ *
+ * That is exactly what happened: the sweep is scheduled 4s after an entries
+ * change and captures the entry list as it was then, so on a machine slow
+ * enough for the compose to outlast the timer, the attachment was swept before
+ * it was ever referenced. It survived locally and failed on CI, which is the
+ * signature of a race rather than a platform difference.
+ */
+const PRUNE_GRACE_MS = 30 * 60 * 1000;
+
+/**
+ * Remove blobs no entry references any more.
+ *
+ * Deleting an entry does not reach into IndexedDB — that would make every
+ * delete an async operation that can fail halfway. Instead the orphans are
+ * swept up afterwards, which is safe because a blob nothing points at is
+ * unreachable either way.
+ */
+export async function pruneFiles(keepIds, { graceMs = PRUNE_GRACE_MS } = {}) {
   try {
     const keep = new Set(keepIds);
+    const cutoff = Date.now() - graceMs;
     const db = await openDB();
     await new Promise((resolve) => {
       const tx = db.transaction(FILES, 'readwrite');
       const store = tx.objectStore(FILES);
-      const cursor = store.openKeyCursor();
+      const cursor = store.openCursor();
       cursor.onsuccess = () => {
         const c = cursor.result;
         if (!c) return resolve();
-        if (!keep.has(c.key)) store.delete(c.key);
+        const at = c.value?.at ?? 0;
+        // Recent blobs are left alone: they may belong to an entry still being
+        // written. Anything without a timestamp predates this field and is old.
+        // Inclusive: with no grace at all, a blob written in this same
+        // millisecond is still eligible.
+        if (!keep.has(c.key) && at <= cutoff) store.delete(c.key);
         c.continue();
       };
       cursor.onerror = () => resolve();
@@ -439,7 +473,7 @@ export async function clearAll() {
       (async () => {
         await idbSet(STATE_KEY, undefined);
         await idbSet(SNAPSHOT_KEY, []);
-        await pruneFiles([]); // an erase must take the receipts with it
+        await pruneFiles([], { graceMs: 0 }); // an erase takes everything, now
       })(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('clear timed out')), 4000)),
     ]);

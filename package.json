@@ -29,6 +29,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^26.1.0",
     "oxlint": "^1.75.0",
     "vite": "^8.2.0",
@@ -36,7 +37,7 @@
     "wrangler": "^4.127.1"
   },
   "license": "MIT",
-  "description": "Expenses, earnings, savings and investments \u2014 visualised by week, month, quarter and year. Local-first, nothing leaves the browser.",
+  "description": "Expenses, earnings, savings and investments — visualised by week, month, quarter and year. Local-first, nothing leaves the browser.",
   "homepage": "https://cointrack.ark07yad.workers.dev",
   "repository": {
     "type": "git",

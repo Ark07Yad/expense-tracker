@@ -74,6 +74,22 @@ if (isDom) {
     Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   }
 
+  /**
+   * jsdom's Blob predates `arrayBuffer()`, which every real browser has and
+   * which attachment storage depends on. FileReader is present, so the shim is
+   * the standard read.
+   */
+  if (typeof Blob !== 'undefined' && !Blob.prototype.arrayBuffer) {
+    Blob.prototype.arrayBuffer = function arrayBuffer() {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(this);
+      });
+    };
+  }
+
   /** Attachments and the JSON export both go through object URLs. */
   if (!URL.createObjectURL) {
     URL.createObjectURL = () => `blob:test/${Math.random().toString(36).slice(2)}`;
