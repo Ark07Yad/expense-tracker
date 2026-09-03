@@ -281,7 +281,25 @@ export default function Analytics({ onNavigate }) {
           {/* ── Mix + movers ── */}
           <div className="grid lg:grid-cols-5 gap-4">
             <Card className="lg:col-span-2 p-5">
-              <SectionTitle icon="pie" sub={`${f.expenseCats.length} categories in play`}>Breakdown</SectionTitle>
+              <SectionTitle
+                icon="pie"
+                sub={
+                  f.expenseCats.length === 1
+                    ? '1 category in play'
+                    : `${f.expenseCats.length} categories in play`
+                }
+              >
+                Breakdown
+              </SectionTitle>
+              {f.expenseCats.length === 0 ? (
+                /* A donut of nothing is a large blank square where a chart
+                   should be. Say there is nothing instead. */
+                <Empty
+                  icon="pie"
+                  title="No spending to break down"
+                  body="Money came in or moved to savings this period, but nothing was spent."
+                />
+              ) : (
               <div className="h-48 relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -303,6 +321,7 @@ export default function Analytics({ onNavigate }) {
                   </div>
                 </div>
               </div>
+              )}
               <div className="space-y-1.5 mt-3">
                 {donutData.map((c) => (
                   <div key={c.id} className="flex items-center gap-2.5 text-[12.5px]">

@@ -60,6 +60,46 @@ describe('totalsOf', () => {
     expect(t.savingsRate).toBe(70); // (200 saved + 500 left) / 1000
   });
 
+  it('never claims you kept more than you earned', () => {
+    // Moving more into savings than arrived is possible — the surplus comes
+    // from an earlier balance — but "keeping 137% of what you earn" turned a
+    // month in the red into what read as a triumph.
+    const t = totalsOf([
+      entry('2020-06-01', 'earning', 'salary', 502),
+      entry('2020-06-02', 'saving', 'emergency', 687),
+    ]);
+    expect(t.savingsRate).toBe(100);
+    expect(t.net).toBe(-185);
+    expect(t.beyondIncome).toBe(185);
+    // Nothing was spent, so this is not overspending.
+    expect(t.overspent).toBe(false);
+  });
+
+  it('distinguishes overspending from setting too much aside', () => {
+    const spent = totalsOf([
+      entry('2020-06-01', 'earning', 'salary', 500),
+      entry('2020-06-02', 'expense', 'dining', 900),
+    ]);
+    expect(spent.overspent).toBe(true);
+    expect(spent.beyondIncome).toBe(400);
+
+    const saved = totalsOf([
+      entry('2020-06-01', 'earning', 'salary', 500),
+      entry('2020-06-02', 'saving', 'goal', 900),
+    ]);
+    expect(saved.overspent).toBe(false);
+    expect(saved.beyondIncome).toBe(400);
+  });
+
+  it('reports no overshoot in a healthy month', () => {
+    const t = totalsOf([
+      entry('2020-06-01', 'earning', 'salary', 1000),
+      entry('2020-06-02', 'expense', 'dining', 300),
+    ]);
+    expect(t.beyondIncome).toBe(0);
+    expect(t.overspent).toBe(false);
+  });
+
   it('does not divide by zero when nothing came in', () => {
     const t = totalsOf([entry('2020-06-02', 'expense', 'dining', 300)]);
     expect(t.savingsRate).toBe(0);

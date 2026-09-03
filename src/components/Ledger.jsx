@@ -324,7 +324,7 @@ export default function Ledger({ date, setDate, toast }) {
                     {dayLabel(g.date)}
                   </span>
                   <span className="text-[11.5px] text-faint tabular">
-                    {formatMoney(totalsOf(g.entries).expense, cur)} out
+                    {daySummary(totalsOf(g.entries), cur)}
                   </span>
                 </button>
                 <EntryList entries={g.entries} onEdit={openEdit} dispatch={dispatch} toast={toast} onView={setViewing} />
@@ -354,6 +354,22 @@ export default function Ledger({ date, setDate, toast }) {
       />
     </div>
   );
+}
+
+/**
+ * One line describing a day.
+ *
+ * Reporting only expenses meant a day holding a salary and a transfer to
+ * savings summed to "0 € out" — a day where a great deal of money moved,
+ * described as a day where none did. Savings leave the account too, and income
+ * deserves a mention of its own.
+ */
+function daySummary(totals, cur) {
+  const out = totals.expense + totals.saving;
+  const parts = [];
+  if (totals.earning > 0) parts.push(`${formatMoney(totals.earning, cur, { compact: true })} in`);
+  if (out > 0) parts.push(`${formatMoney(out, cur, { compact: true })} out`);
+  return parts.length ? parts.join(' · ') : 'nothing moved';
 }
 
 /* ─────────────────────────────── Entry rows ─────────────────────────────── */

@@ -93,13 +93,27 @@ export default function Dashboard({ onNavigate }) {
       <Card glow sheen className="p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div className="min-w-0">
-            <h1 className="text-[22px] sm:text-[26px] font-semibold display leading-tight truncate">{greeting}</h1>
+            {/* Wraps rather than truncates: a name is the one word on this
+                screen that must not be cut off, and the badge beside it varies
+                in width. */}
+            <h1 className="text-[22px] sm:text-[26px] font-semibold display leading-tight text-balance">
+              {greeting}
+            </h1>
             <p className="text-[13px] text-dim mt-1">
               {f.label} · {formatPercent(f.progress * 100)} through the month
             </p>
           </div>
-          <Badge tone={f.totals.net >= 0 ? 'good' : 'bad'} className="shrink-0 mt-1">
-            {f.totals.net >= 0 ? 'In the black' : 'Overspent'}
+          {/*
+            * Three states, not two. A month with nothing spent and a large
+            * transfer to savings is in the red, but calling it "Overspent" is
+            * false — the money was set aside, not spent, and the shortfall came
+            * from an earlier balance.
+            */}
+          <Badge
+            tone={f.totals.net >= 0 ? 'good' : f.totals.overspent ? 'bad' : 'warn'}
+            className="shrink-0 mt-1"
+          >
+            {f.totals.net >= 0 ? 'In the black' : f.totals.overspent ? 'Overspent' : 'More out than in'}
           </Badge>
         </div>
 
@@ -169,7 +183,11 @@ export default function Dashboard({ onNavigate }) {
               />
               <div className="flex items-center justify-between text-[11.5px] mt-2.5">
                 <span className="text-faint">
-                  {f.totals.net >= 0 ? 'Unspent so far' : 'Beyond what came in'}
+                  {f.totals.net >= 0
+                    ? 'Unspent so far'
+                    : f.totals.overspent
+                    ? 'Beyond what came in'
+                    : 'Set aside beyond this month'}
                 </span>
                 <span className={`tabular font-medium ${f.totals.net >= 0 ? 'text-good' : 'text-bad'}`}>
                   <Money value={Math.abs(f.totals.net)} />

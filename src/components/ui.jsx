@@ -133,7 +133,15 @@ export function Card({ className = '', children, glow = false, sheen = false, ..
 
 export function SectionTitle({ icon, children, action, sub }) {
   return (
-    <div className="flex items-end justify-between gap-3 mb-3">
+    /*
+     * Stacks on a narrow screen.
+     *
+     * Side by side, a wide action — the three-way chart switcher, for one —
+     * leaves the heading a column a few characters across, and the title and
+     * its description wrap to one word per line. There is no width to share on
+     * a phone, so the action takes its own row instead.
+     */
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-3 mb-3">
       <div className="min-w-0">
         <h2 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.14em] text-dim">
           {icon && <Icon name={icon} className="size-4" />}
@@ -141,7 +149,7 @@ export function SectionTitle({ icon, children, action, sub }) {
         </h2>
         {sub && <p className="text-[12px] text-faint mt-1">{sub}</p>}
       </div>
-      {action}
+      {action && <div className="shrink-0 -mx-1 px-1 overflow-x-auto sm:overflow-visible">{action}</div>}
     </div>
   );
 }

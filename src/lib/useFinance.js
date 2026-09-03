@@ -55,7 +55,29 @@ export function totalsOf(entries) {
   t.net = t.earning - t.expense - t.saving;
   t.free = t.net;
   t.outflow = t.expense + t.saving;
-  t.savingsRate = t.earning > 0 ? ((t.saving + Math.max(0, t.net)) / t.earning) * 100 : 0;
+
+  /**
+   * The share of income kept, which cannot exceed all of it.
+   *
+   * Moving more into savings than came in is perfectly possible — the surplus
+   * comes from an earlier month's balance — but it is not "keeping 137% of what
+   * you earn", and presenting it that way turned a month in the red into what
+   * read as a triumph. Capped, with the overshoot reported separately as what
+   * it actually is.
+   */
+  t.savingsRate =
+    t.earning > 0 ? Math.min(100, ((t.saving + Math.max(0, t.net)) / t.earning) * 100) : 0;
+
+  /** How much left this month beyond what arrived in it. */
+  t.beyondIncome = Math.max(0, -t.net);
+
+  /**
+   * Spending alone exceeded income. Distinguished from `beyondIncome` because
+   * the two need different words: overspending is a problem, moving savings
+   * ahead of payday usually is not.
+   */
+  t.overspent = t.expense > t.earning;
+
   return t;
 }
 

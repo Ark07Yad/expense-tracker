@@ -158,7 +158,7 @@ test.describe('with a full ledger', () => {
     // Not just the table: the breakdown, the movers and the totals must all be
     // describing the same slice, or a chart ends up showing one category
     // against a headline for every category.
-    await expect(page.getByText('1 categories in play')).toBeVisible();
+    await expect(page.getByText('1 category in play')).toBeVisible();
     const after = await categoryTable.textContent();
     expect(after).toContain('Food & Dining');
     expect(after).not.toContain('Rent & Housing');
