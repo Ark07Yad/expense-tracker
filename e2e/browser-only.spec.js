@@ -188,21 +188,29 @@ test.describe('receipts', () => {
     expect(state.entries[0].attachments).toHaveLength(1);
     expect(JSON.stringify(state)).not.toContain('data:image');
 
-    const inIdb = await page.evaluate(async (id) => {
-      const db = await new Promise((res) => {
-        const r = indexedDB.open('cointrack', 2);
-        r.onsuccess = () => res(r.result);
-      });
-      const blob = await new Promise((res) => {
-        const tx = db.transaction('files', 'readonly');
-        const rq = tx.objectStore('files').get(id);
-        rq.onsuccess = () => res(rq.result);
-        rq.onerror = () => res(null);
-      });
-      db.close();
-      return blob ? blob.size : 0;
-    }, state.entries[0].attachments[0].id);
-    expect(inIdb).toBeGreaterThan(0);
+    // Polled, and tolerant of either stored shape: the record is written as
+    // { buffer, type, size } now, and as a Blob by earlier versions. Reading it
+    // once immediately is a race on a slow machine.
+    const id = state.entries[0].attachments[0].id;
+    const storedBytes = () =>
+      page.evaluate(async (key) => {
+        const db = await new Promise((res, rej) => {
+          const r = indexedDB.open('cointrack', 2);
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        const record = await new Promise((res) => {
+          const tx = db.transaction('files', 'readonly');
+          const rq = tx.objectStore('files').get(key);
+          rq.onsuccess = () => res(rq.result);
+          rq.onerror = () => res(null);
+        });
+        db.close();
+        if (!record) return 0;
+        return record.size ?? record.buffer?.byteLength ?? 0;
+      }, id);
+
+    await expect.poll(storedBytes, { timeout: 10_000 }).toBeGreaterThan(0);
 
     // And it can be viewed.
     await go(page, 'Ledger');
