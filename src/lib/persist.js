@@ -118,26 +118,30 @@ function idbSet(key, value, store = STORE) {
  * the storage budget on duplicated images at the expense of the entries would
  * be the wrong trade.
  */
-export function putFile(id, blob) {
-  return idbSet(id, blob, FILES);
+export async function putFile(id, blob) {
+  /*
+   * Stored as an ArrayBuffer, not as the Blob itself.
+   *
+   * WebKit refuses to structured-clone a Blob or File into IndexedDB — the
+   * transaction simply errors, with no message — so an attachment saved
+   * perfectly well in Chromium failed outright in Safari, and the only sign was
+   * the app's own "out of storage" message. ArrayBuffers have no such
+   * restriction anywhere, and the Blob is trivially rebuilt on the way out.
+   */
+  const buffer = await blob.arrayBuffer();
+  return idbSet(id, { buffer, type: blob.type || 'application/octet-stream', size: buffer.byteLength }, FILES);
 }
 
-export function getFile(id) {
-  return idbGet(id, FILES).catch(() => null);
-}
-
-export function deleteFile(id) {
-  return openDB()
-    .then(
-      (db) =>
-        new Promise((resolve, reject) => {
-          const tx = db.transaction(FILES, 'readwrite');
-          tx.objectStore(FILES).delete(id);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        })
-    )
-    .catch(() => {});
+export async function getFile(id) {
+  try {
+    const stored = await idbGet(id, FILES);
+    if (!stored) return null;
+    // Blobs written by an earlier version are still readable as they are.
+    if (stored instanceof Blob) return stored;
+    return new Blob([stored.buffer], { type: stored.type });
+  } catch {
+    return null;
+  }
 }
 
 /** Total bytes held in attachments, for the storage panel. */
@@ -153,7 +157,8 @@ export async function fileUsage() {
       cursor.onsuccess = () => {
         const c = cursor.result;
         if (!c) return resolve({ bytes, count });
-        bytes += c.value?.size || 0;
+        // Either shape: the record written now, or a legacy Blob.
+        bytes += c.value?.size || c.value?.buffer?.byteLength || 0;
         count += 1;
         c.continue();
       };

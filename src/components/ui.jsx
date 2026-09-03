@@ -636,9 +636,11 @@ export function Bar({
 
 /* ─────────────────────────────  Sheet / modal  ─────────────────────────── */
 
+/** `:not([data-focus-guard])` keeps the sentinels out of their own search. */
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
-  'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'select:not([disabled]), textarea:not([disabled]), ' +
+  '[tabindex]:not([tabindex="-1"]):not([data-focus-guard])';
 
 /**
  * Can this element actually take focus?
@@ -651,6 +653,13 @@ const FOCUSABLE =
  * degrades to "everything is visible" rather than "nothing is" when there are
  * no stylesheets.
  */
+/** Focus the first or last focusable descendant of `root`. */
+function focusEdge(root, edge) {
+  const items = [...(root?.querySelectorAll(FOCUSABLE) || [])].filter(isVisible);
+  if (!items.length) return;
+  (edge === 'last' ? items[items.length - 1] : items[0]).focus();
+}
+
 function isVisible(el) {
   if (el.hasAttribute('hidden') || el.closest('[aria-hidden="true"]')) return false;
   const style = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
@@ -684,20 +693,14 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
       }
       if (e.key !== 'Tab') return;
 
-      const items = [...(panel.current?.querySelectorAll(FOCUSABLE) || [])].filter(isVisible);
-      if (!items.length) return;
-
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-
-      // Wrap at both ends, and pull focus back in if it has escaped entirely.
-      if (e.shiftKey && (active === first || !panel.current.contains(active))) {
+      // Only the recovery case is handled here; the wrap itself is done by the
+      // sentinels below. Comparing against a computed first and last element
+      // cannot work in general: a date input is several tab stops in some
+      // engines, so "the last focusable" is not the last thing Tab reaches, and
+      // focus slips out through the gap.
+      if (!panel.current?.contains(document.activeElement)) {
         e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && (active === last || !panel.current.contains(active))) {
-        e.preventDefault();
-        first.focus();
+        focusEdge(panel.current, e.shiftKey ? 'last' : 'first');
       }
     };
 
@@ -753,6 +756,22 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
                     rounded-t-3xl sm:rounded-3xl surface animate-rise sm:mx-4`}
         style={{ background: 'var(--bg-elev)' }}
       >
+        {/*
+          * Tab guards.
+          *
+          * Letting the browser's own tab order run and only intervening when it
+          * reaches the edge is what keeps composite controls working — a date
+          * field is several tab stops, and a trap that computes "the next
+          * element" itself would make its segments unreachable.
+          */}
+        <span
+          tabIndex={0}
+          data-focus-guard=""
+          aria-hidden="true"
+          onFocus={() => focusEdge(panel.current, 'last')}
+          style={{ position: 'fixed', opacity: 0, pointerEvents: 'none' }}
+        />
+
         <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b border-hair shrink-0">
           <div className="min-w-0">
             <h3 id={titleId} className="text-lg font-semibold truncate">{title}</h3>
@@ -762,6 +781,14 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
         </div>
         <div className="overflow-y-auto overscroll-contain px-5 py-4 flex-1">{children}</div>
         {footer && <div className="px-5 py-4 border-t border-hair shrink-0">{footer}</div>}
+
+        <span
+          tabIndex={0}
+          data-focus-guard=""
+          aria-hidden="true"
+          onFocus={() => focusEdge(panel.current, 'first')}
+          style={{ position: 'fixed', opacity: 0, pointerEvents: 'none' }}
+        />
       </div>
     </div>,
     document.body

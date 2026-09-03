@@ -1,0 +1,45 @@
+name: Deploy
+
+# Deploys only after CI has passed on main, and only if the secret is present —
+# a fork or a clone without credentials should not see a red X for a step it was
+# never able to run.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Cloudflare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check for credentials
+        id: creds
+        run: echo "present=${{ secrets.CLOUDFLARE_API_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        if: steps.creds.outputs.present == 'true'
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Explain the skip
+        if: steps.creds.outputs.present != 'true'
+        run: |
+          echo "::notice::Skipped — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository secrets to deploy from CI."

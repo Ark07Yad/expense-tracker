@@ -33,9 +33,22 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /*
+   * Three engines, because the bugs this suite is meant to catch are
+   * engine-specific by nature. The export code guards against a Firefox quirk
+   * that Chromium never exhibits, IndexedDB and service workers behave
+   * differently in WebKit, and a CSS or focus regression in one engine is
+   * invisible in the others.
+   */
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
 
   webServer: {
+    // CI has already built in the previous job's checkout, but each job starts
+    // clean, so the build stays part of the command rather than being assumed.
     command: 'npm run build && npx vite preview --port 4181 --strictPort',
     url: 'http://localhost:4181',
     reuseExistingServer: !process.env.CI,

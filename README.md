@@ -166,9 +166,14 @@ themselves through a live region.
 
 ```bash
 npm test          # 253 unit and component tests
-npm run test:e2e  # 17 end-to-end journeys
+npm run test:e2e  # 17 journeys × chromium, firefox and webkit
 npm run test:all  # both
 ```
+
+CI runs the lot on every push and pull request — lint, unit tests and a build,
+then the journeys across all three engines in parallel jobs. Deployment happens
+only after CI is green on `main`, and skips itself with a note rather than
+failing if no Cloudflare credentials are configured.
 
 253 tests. The engines run in node — dates and period boundaries, aggregation,
 schedules, goals, CSV parsing, the advisor's rules and a performance budget.
@@ -187,7 +192,7 @@ looks correct until you check the number weeks later. Several are regressions
 that actually happened here, kept as tests so they cannot happen twice.
 
 The end-to-end tests run Playwright against the **built** app served by `vite
-preview`, not the dev server — the code-split chunks, the generated headers and
+preview`, on **Chromium, Firefox and WebKit**, not the dev server — the code-split chunks, the generated headers and
 the service worker only exist in a production build, and two of them have
 already been the subject of real bugs. There are deliberately few of them, and
 each is a whole journey: setting up and logging a first entry, data surviving a
@@ -195,6 +200,13 @@ reload and a second tab, every screen and all four period levels rendering
 without throwing, and the things only a real browser can show at all — an
 export that produces an actual file, a CSV picked from disk, a receipt stored in
 IndexedDB, and the app still running with the network switched off.
+
+Running three engines is not ceremony. It immediately found two real bugs that
+Chromium cannot show: WebKit refuses to structured-clone a `Blob` into
+IndexedDB, so every receipt failed to save in Safari with the app reporting it
+as being out of storage; and the focus trap let Tab escape to the document body
+for one hop, because a date input is several tab stops in some engines and
+"the last focusable element" is therefore not the last thing Tab reaches.
 
 ## What the advisor does and does not do
 

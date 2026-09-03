@@ -1,0 +1,88 @@
+name: CI
+
+# Every push and every pull request. The point of this file is that nothing
+# reaches main without the suite having run — until now everything was verified
+# locally, which works right up until the once it doesn't.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A newer push supersedes an in-flight run on the same ref; there is no value
+  # in finishing a check on a commit nobody is looking at any more.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and component tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Uploaded so a failing e2e run can be compared against what was actually
+      # served, and so the bundle size is inspectable without a local build.
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 5
+
+  e2e:
+    name: End-to-end (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: check
+    strategy:
+      # One engine failing should not hide the result for the others — the whole
+      # reason for a matrix is to see which one is broken.
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Only the engine this job needs, with its system dependencies. Installing
+      # all three per job would triple the download for no benefit.
+      - name: Install ${{ matrix.browser }}
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run journeys
+        run: npx playwright test --project=${{ matrix.browser }}
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: |
+            test-results
+            playwright-report
+          retention-days: 7
