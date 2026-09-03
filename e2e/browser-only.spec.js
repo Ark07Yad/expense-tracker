@@ -236,13 +236,26 @@ test.describe('receipts', () => {
     });
     test.skip(!canRoundTrip, 'this build cannot round-trip binary data through IndexedDB');
 
-    const image = page.getByRole('dialog').locator('img');
-    await expect(image).toBeVisible();
-    // Visible is not enough: a broken image is still a visible element. A
-    // non-zero natural width is proof the bytes survived the round trip.
-    await expect
-      .poll(() => image.evaluate((el) => el.naturalWidth), { timeout: 10_000 })
-      .toBeGreaterThan(0);
+    /*
+     * Reported as a single description rather than a bare visibility check.
+     *
+     * The viewer has three states — loading, "not on this device", and the
+     * image — and a failure that only says "no img element" cannot tell them
+     * apart. Folding the dialog's own text into the assertion means a failure
+     * says which branch rendered, which is the difference between a diagnosis
+     * and another run.
+     */
+    const viewerState = () =>
+      page.getByRole('dialog').evaluate((dialog) => {
+        const img = dialog.querySelector('img');
+        if (img) return img.naturalWidth > 0 ? 'image' : 'broken-image';
+        if (dialog.querySelector('object')) return 'pdf';
+        if (dialog.textContent.includes('not on this device')) return 'missing';
+        if (dialog.querySelector('.animate-pulse')) return 'loading';
+        return `unknown: ${dialog.textContent.slice(0, 200)}`;
+      });
+
+    await expect.poll(viewerState, { timeout: 12_000 }).toBe('image');
   });
 });
 
