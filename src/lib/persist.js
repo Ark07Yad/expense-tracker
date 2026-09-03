@@ -144,6 +144,20 @@ export async function getFile(id) {
   }
 }
 
+export function deleteFile(id) {
+  return openDB()
+    .then(
+      (db) =>
+        new Promise((resolve, reject) => {
+          const tx = db.transaction(FILES, 'readwrite');
+          tx.objectStore(FILES).delete(id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        })
+    )
+    .catch(() => {});
+}
+
 /** Total bytes held in attachments, for the storage panel. */
 export async function fileUsage() {
   try {

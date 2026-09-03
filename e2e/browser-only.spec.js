@@ -196,6 +196,46 @@ test.describe('receipts', () => {
     await go(page, 'Ledger');
     await page.getByRole('button', { name: /View 1 attached file/ }).first().click();
 
+    /*
+     * Whether the bytes can come back at all is a platform capability, so it is
+     * probed rather than assumed from the browser name. Playwright's Linux
+     * WebKit build cannot round-trip binary data through IndexedDB; Safari
+     * proper can, and so can the macOS build. Probing means this assertion
+     * starts running again by itself if that changes, and never silently passes
+     * on a platform where the feature is broken for real.
+     */
+    const canRoundTrip = await page.evaluate(async () => {
+      try {
+        const db = await new Promise((res, rej) => {
+          const r = indexedDB.open('probe-binary', 1);
+          r.onupgradeneeded = () => r.result.createObjectStore('x');
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        const written = await new Promise((res) => {
+          const tx = db.transaction('x', 'readwrite');
+          tx.objectStore('x').put(new Uint8Array([1, 2, 3]).buffer, 'k');
+          tx.oncomplete = () => res(true);
+          tx.onerror = () => res(false);
+          tx.onabort = () => res(false);
+        });
+        const read = written
+          ? await new Promise((res) => {
+              const tx = db.transaction('x', 'readonly');
+              const rq = tx.objectStore('x').get('k');
+              rq.onsuccess = () => res(rq.result?.byteLength ?? 0);
+              rq.onerror = () => res(0);
+            })
+          : 0;
+        db.close();
+        indexedDB.deleteDatabase('probe-binary');
+        return read === 3;
+      } catch {
+        return false;
+      }
+    });
+    test.skip(!canRoundTrip, 'this build cannot round-trip binary data through IndexedDB');
+
     const image = page.getByRole('dialog').locator('img');
     await expect(image).toBeVisible();
     // Visible is not enough: a broken image is still a visible element. A
