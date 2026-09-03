@@ -188,34 +188,21 @@ test.describe('receipts', () => {
     expect(state.entries[0].attachments).toHaveLength(1);
     expect(JSON.stringify(state)).not.toContain('data:image');
 
-    // Polled, and tolerant of either stored shape: the record is written as
-    // { buffer, type, size } now, and as a Blob by earlier versions. Reading it
-    // once immediately is a race on a slow machine.
-    const id = state.entries[0].attachments[0].id;
-    const storedBytes = () =>
-      page.evaluate(async (key) => {
-        const db = await new Promise((res, rej) => {
-          const r = indexedDB.open('cointrack', 2);
-          r.onsuccess = () => res(r.result);
-          r.onerror = () => rej(r.error);
-        });
-        const record = await new Promise((res) => {
-          const tx = db.transaction('files', 'readonly');
-          const rq = tx.objectStore('files').get(key);
-          rq.onsuccess = () => res(rq.result);
-          rq.onerror = () => res(null);
-        });
-        db.close();
-        if (!record) return 0;
-        return record.size ?? record.buffer?.byteLength ?? 0;
-      }, id);
+    // What matters is that the bytes round-tripped through IndexedDB and come
+    // back as a decodable image. Asserting on the stored record's shape instead
+    // would be testing the storage format, which differs by engine and has
+    // already changed once.
 
-    await expect.poll(storedBytes, { timeout: 10_000 }).toBeGreaterThan(0);
-
-    // And it can be viewed.
     await go(page, 'Ledger');
     await page.getByRole('button', { name: /View 1 attached file/ }).first().click();
-    await expect(page.getByRole('dialog').locator('img')).toBeVisible();
+
+    const image = page.getByRole('dialog').locator('img');
+    await expect(image).toBeVisible();
+    // Visible is not enough: a broken image is still a visible element. A
+    // non-zero natural width is proof the bytes survived the round trip.
+    await expect
+      .poll(() => image.evaluate((el) => el.naturalWidth), { timeout: 10_000 })
+      .toBeGreaterThan(0);
   });
 });
 
