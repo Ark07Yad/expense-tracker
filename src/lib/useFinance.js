@@ -83,24 +83,48 @@ export function totalsOf(entries) {
  * as part of a total that carries forward — otherwise last month's diligence
  * disappears on the 1st, which is exactly what it did.
  */
-export function balanceAt(entries, until) {
-  let balance = 0;
-  let pot = 0;
+export function balanceAt(entries, until, opening = {}) {
+  /*
+   * `opening` is what you already had the day you started tracking.
+   *
+   * Without it the balance is not your money, it is only the part of your money
+   * this app happens to have watched — which for anyone who did not open the
+   * app on the day they opened their first bank account is a number with no
+   * use. Same reasoning as a goal's opening balance.
+   */
+  let balance = Math.max(0, Number(opening.balance) || 0);
+  let pot = Math.max(0, Number(opening.savings) || 0);
+  let toInvestments = 0;
+
   for (const e of entries) {
     if (until && e.date > until) continue;
     const amount = Math.abs(Number(e.amount) || 0);
     if (e.kind === 'earning') balance += amount;
     else if (e.kind === 'expense') balance -= amount;
-    else if (e.kind === 'saving') pot += amount;
-    else if (e.kind === 'withdrawal') pot -= amount;
+    else if (e.kind === 'saving') {
+      pot += amount;
+      if (e.category === 'invest-transfer') toInvestments += amount;
+    } else if (e.kind === 'withdrawal') {
+      pot -= amount;
+      if (e.category === 'invest-transfer') toInvestments -= amount;
+    }
   }
+
   return {
-    /** Everything you have. */
+    /** Everything the ledger knows you have, before investments are separated. */
     balance,
     /** The part of it earmarked in a savings pot. */
     pot,
-    /** The rest — what is free to spend without touching savings. */
+    /** The rest — free to spend without touching savings. */
     spendable: balance - pot,
+    /**
+     * How much of that has been sent to investments.
+     *
+     * Held separately because it is the one figure that appears in two ledgers
+     * at once: it left the bank, and it shows up again as a holding. Anything
+     * adding cash to investments has to subtract it or count it twice.
+     */
+    toInvestments,
   };
 }
 
@@ -300,8 +324,12 @@ export function computeFinance(state, period, offset = 0, anchor = todayKey(), c
 
   // What the running balance was before this period began, and where it stands
   // at the end of it. Without the opening figure a month has no context at all.
-  const opening = balanceAt(state.entries, addDays(range.start, -1));
-  const closing = balanceAt(state.entries, range.end);
+  const openingProfile = {
+    balance: state.profile?.openingBalance,
+    savings: state.profile?.openingSavings,
+  };
+  const opening = balanceAt(state.entries, addDays(range.start, -1), openingProfile);
+  const closing = balanceAt(state.entries, range.end, openingProfile);
   const expenseCats = byCategory(inRange, 'expense');
   const progress = periodProgress(range, todayKey());
   const elapsedDays = Math.max(1, Math.min(rangeDays(range), daysBetween(range.start, todayKey()) + 1));
@@ -549,4 +577,123 @@ export function useDailySpend(days = 90) {
     }
     return { days: out, max: out.reduce((m, d) => Math.max(m, d.value), 0), end };
   }, [state.entries, days]);
+}
+
+/* ─────────────────────────────  Reconciliation  ──────────────────────────── */
+
+/**
+ * One net worth figure, and the pieces it is made of.
+ *
+ * The app had two totals that never met: a ledger balance, and a holdings
+ * value. Money moved through the "To investments" category appeared in both —
+ * once as savings that left the bank, and again as the holding it bought — so
+ * adding them would have counted it twice, and showing them apart left the
+ * obvious question unanswered.
+ *
+ * Money sent to investments is therefore removed from cash and represented by
+ * what the holdings are actually worth. The difference between the two is the
+ * gain, which is real wealth the ledger alone cannot see.
+ *
+ * Holdings funded before you started tracking are handled by the same
+ * arithmetic without a special case: nothing was transferred through the
+ * ledger, so nothing is subtracted, and the whole value is new.
+ */
+export function netWorthOf(state, asOf = todayKey()) {
+  const opening = {
+    balance: state.profile?.openingBalance,
+    savings: state.profile?.openingSavings,
+  };
+  const led = balanceAt(state.entries, asOf, opening);
+  const inv = investmentsFor(state, 120);
+
+  /*
+   * Holdings are valued at the month `asOf` falls in, not always at today.
+   *
+   * Otherwise "net worth at the start of the month" would pair an old ledger
+   * balance with today's share price, and the change over the month would be
+   * partly imaginary. Month granularity is the right granularity here because
+   * it is the only one holdings are ever recorded at.
+   */
+  const investments = inv.empty
+    ? 0
+    : (() => {
+        const wanted = monthKey(asOf);
+        let latest = 0;
+        for (const row of inv.series) if (row.key <= wanted) latest = row.value;
+        return latest;
+      })();
+
+  // What is left in the bank once the money sent to investments is taken out.
+  const cash = led.balance - led.toInvestments;
+  // The savings pot, likewise, without the part that has become holdings.
+  const pot = led.pot - led.toInvestments;
+
+  return {
+    netWorth: cash + investments,
+    cash,
+    /** Earmarked savings still held as money, not as investments. */
+    pot,
+    /** Free to spend without touching savings. */
+    spendable: cash - pot,
+    investments,
+    investedFromLedger: led.toInvestments,
+    /**
+     * Sent to investments but never recorded as a holding.
+     *
+     * Not an error — it may simply not be entered yet — but it is the one
+     * situation where this figure understates what you own, so it is surfaced
+     * rather than silently absorbed.
+     */
+    untracked: Math.max(0, led.toInvestments - inv.invested),
+    gain: inv.empty ? 0 : inv.gain,
+    hasInvestments: !inv.empty,
+  };
+}
+
+/**
+ * A month per row: what came in, what went out, what was kept, and the balance
+ * that resulted.
+ *
+ * Income is split so a salary can be read on its own line — a month where the
+ * salary was the same but the total was not is a different story from one where
+ * the salary changed, and a single "earned" figure tells neither.
+ */
+export function monthlyBreakdown(state, months = 12, today = todayKey()) {
+  const opening = {
+    balance: state.profile?.openingBalance,
+    savings: state.profile?.openingSavings,
+  };
+
+  const rows = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const f = computeFinance(state, 'month', -i, today);
+    const inMonth = f.entries.filter((e) => e.kind === 'earning');
+    const salary = inMonth
+      .filter((e) => e.category === 'salary')
+      .reduce((n, e) => n + Math.abs(Number(e.amount) || 0), 0);
+
+    rows.push({
+      key: monthKey(f.range.start),
+      label: new Date(`${f.range.start}T12:00:00`).toLocaleDateString(undefined, {
+        month: 'short',
+        year: 'numeric',
+      }),
+      short: new Date(`${f.range.start}T12:00:00`).toLocaleDateString(undefined, { month: 'short' }),
+      range: f.range,
+      salary,
+      otherIncome: f.totals.earning - salary,
+      earning: f.totals.earning,
+      expense: f.totals.expense,
+      saved: f.totals.saved,
+      setAside: f.totals.setAside,
+      savingsRate: f.totals.savingsRate,
+      count: f.totals.count,
+      balance: balanceAt(state.entries, f.range.end, opening).balance,
+      isCurrent: f.isCurrent,
+    });
+  }
+
+  // Months before anything was logged are noise, not history.
+  const firstReal = rows.findIndex((r) => r.count > 0);
+  return firstReal <= 0 ? rows : rows.slice(firstReal);
 }

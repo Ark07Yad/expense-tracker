@@ -14,7 +14,7 @@ import {
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { useStore } from '../lib/store';
-import { useFinance } from '../lib/useFinance';
+import { monthlyBreakdown, useFinance } from '../lib/useFinance';
 import { PERIODS, addDays, dayLabel, formatMoney, formatPercent, parseKey, todayKey } from '../lib/calc';
 import { categoriesFor, categoryById } from '../lib/data';
 import {
@@ -440,6 +440,9 @@ export default function Analytics({ onNavigate }) {
             </Card>
           )}
 
+          {/* ── Month by month ── */}
+          <MonthlyTable state={state} cur={cur} />
+
           {/* ── Comparison ── */}
           <Card className="p-5">
             <SectionTitle icon="scale" sub={`This ${p.label.toLowerCase()} against ${p.compare}`}>
@@ -459,8 +462,8 @@ export default function Analytics({ onNavigate }) {
                   {[
                     ['Earned', f.totals.earning, f.prevTotals.earning, true],
                     ['Spent', f.totals.expense, f.prevTotals.expense, false],
-                    ['Saved', f.totals.saving, f.prevTotals.saving, true],
-                    ['Left over', f.totals.net, f.prevTotals.net, true],
+                    ['Set aside', f.totals.saving, f.prevTotals.saving, true],
+                    ['Kept', f.totals.saved, f.prevTotals.saved, true],
                   ].map(([label, now, before, invert]) => (
                     <tr key={label}>
                       <td className="py-2.5">{label}</td>
@@ -599,5 +602,95 @@ function SpendHeatmap({ range, entries, currency }) {
         </Badge>
       </div>
     </div>
+  );
+}
+
+/* ──────────────────────────────  Month by month  ─────────────────────────── */
+
+/**
+ * A row per month: what came in, what went out, what was kept, and the running
+ * balance that resulted.
+ *
+ * Salary is on its own line rather than folded into a single "earned" figure.
+ * A month where the salary held steady but the total moved is a different story
+ * from one where the salary itself changed, and one combined number tells
+ * neither. It is also the fastest way to answer "what did I actually take home
+ * in March", which no chart on this screen could.
+ */
+function MonthlyTable({ state, cur }) {
+  const rows = useMemo(() => monthlyBreakdown(state, 12), [state]);
+  if (rows.length === 0) return null;
+
+  const totals = rows.reduce(
+    (t, r) => ({
+      salary: t.salary + r.salary,
+      otherIncome: t.otherIncome + r.otherIncome,
+      expense: t.expense + r.expense,
+      saved: t.saved + r.saved,
+    }),
+    { salary: 0, otherIncome: 0, expense: 0, saved: 0 }
+  );
+
+  const money = (v) => formatMoney(v, cur, { compact: true });
+
+  return (
+    <Card className="p-5">
+      <SectionTitle icon="calendar" sub="Salary shown separately from anything else that came in">
+        Month by month
+      </SectionTitle>
+
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full text-[13px] min-w-[34rem]">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wider text-faint">
+              <th className="text-left font-medium pb-2">Month</th>
+              <th className="text-right font-medium pb-2">Salary</th>
+              <th className="text-right font-medium pb-2">Other in</th>
+              <th className="text-right font-medium pb-2">Spent</th>
+              <th className="text-right font-medium pb-2">Kept</th>
+              <th className="text-right font-medium pb-2">Balance</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[color:var(--border)]">
+            {rows.map((r) => (
+              <tr key={r.key} className={r.isCurrent ? 'text-[color:var(--text)]' : ''}>
+                <td className="py-2.5 whitespace-nowrap">
+                  {r.label}
+                  {r.isCurrent && <span className="text-[10.5px] text-faint ml-1.5">so far</span>}
+                </td>
+                <td className="py-2.5 text-right tabular">{r.salary ? money(r.salary) : '—'}</td>
+                <td className="py-2.5 text-right tabular text-dim">
+                  {r.otherIncome ? money(r.otherIncome) : '—'}
+                </td>
+                <td className="py-2.5 text-right tabular text-dim">{r.expense ? money(r.expense) : '—'}</td>
+                <td className={`py-2.5 text-right tabular font-medium ${r.saved >= 0 ? 'text-good' : 'text-bad'}`}>
+                  {formatMoney(r.saved, cur, { compact: true, sign: true })}
+                </td>
+                <td className="py-2.5 text-right tabular font-semibold">{money(r.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-hair text-[12px]">
+              <td className="pt-2.5 text-faint">
+                {rows.length} {rows.length === 1 ? 'month' : 'months'}
+              </td>
+              <td className="pt-2.5 text-right tabular">{money(totals.salary)}</td>
+              <td className="pt-2.5 text-right tabular text-dim">{money(totals.otherIncome)}</td>
+              <td className="pt-2.5 text-right tabular text-dim">{money(totals.expense)}</td>
+              <td className={`pt-2.5 text-right tabular font-medium ${totals.saved >= 0 ? 'text-good' : 'text-bad'}`}>
+                {formatMoney(totals.saved, cur, { compact: true, sign: true })}
+              </td>
+              <td className="pt-2.5 text-right tabular text-faint">now</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <p className="text-[11.5px] text-faint mt-3 leading-relaxed">
+        Kept is what came in less what you spent. Money set aside is not subtracted — it is still
+        yours, and it is already counted in the balance.
+      </p>
+    </Card>
   );
 }

@@ -150,6 +150,29 @@ export default function Settings({ toast }) {
           </Field>
         </div>
 
+        <div className="grid sm:grid-cols-2 gap-3 mt-3">
+          <Field
+            label="Money you already had"
+            hint="Your balance the day you started tracking here."
+          >
+            <MoneyInput
+              size="md"
+              value={state.profile.openingBalance}
+              onChange={(v) => setProfile({ openingBalance: v })}
+            />
+          </Field>
+          <Field
+            label="…of which already saved"
+            hint="The part of it that was already set aside."
+          >
+            <MoneyInput
+              size="md"
+              value={state.profile.openingSavings}
+              onChange={(v) => setProfile({ openingSavings: v })}
+            />
+          </Field>
+        </div>
+
         <Field
           label="Savings target"
           className="mt-3"

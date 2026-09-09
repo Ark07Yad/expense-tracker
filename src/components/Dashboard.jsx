@@ -11,10 +11,10 @@
 
 import { Suspense, lazy, useMemo } from 'react';
 import { useStore } from '../lib/store';
-import { useDailySpend, useFinance, useInvestments } from '../lib/useFinance';
+import { netWorthOf, useDailySpend, useFinance, useInvestments } from '../lib/useFinance';
 import { headlineSuggestions } from '../lib/insights';
 import { categoryById, kindById, prefixFor } from '../lib/data';
-import { dayLabel, formatMoney, formatPercent, shortDate } from '../lib/calc';
+import { addDays, dayLabel, formatMoney, formatPercent, shortDate } from '../lib/calc';
 
 /**
  * Tailwind only sees class names that appear literally in the source, so a
@@ -42,6 +42,13 @@ export default function Dashboard({ onNavigate }) {
   const inv = useInvestments(12);
   const daily = useDailySpend(30);
   const cur = state.profile.currency;
+  const worth = useMemo(() => netWorthOf(state), [state]);
+  // The same measure a month earlier, so the comparison is like for like
+  // rather than pairing an old ledger balance with today's holdings.
+  const worthAtStart = useMemo(
+    () => netWorthOf(state, addDays(f.range.start, -1)),
+    [state, f.range.start]
+  );
 
   const tips = useMemo(() => headlineSuggestions(state, 3), [state]);
 
@@ -117,22 +124,41 @@ export default function Dashboard({ onNavigate }) {
           */}
         <div className="surface rounded-2xl p-4 mb-5">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-[11px] uppercase tracking-wider text-faint">Total balance</span>
+            <span className="text-[11px] uppercase tracking-wider text-faint">
+              {worth.hasInvestments ? 'Net worth' : 'Total balance'}
+            </span>
             <span className="text-[11.5px] text-faint tabular">
-              started the month at <Money value={f.opening.balance} compact />
+              started the month at <Money value={worthAtStart.netWorth} compact />
             </span>
           </div>
           <div className="text-[30px] font-semibold display leading-none mt-1.5">
-            <Money value={f.closing.balance} animate />
+            <Money value={worth.netWorth} animate />
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-faint mt-2">
-            <span>
-              <Money value={f.closing.pot} compact className="text-save" /> in savings
-            </span>
-            <span>
-              <Money value={f.closing.spendable} compact /> free to spend
-            </span>
+
+          {/* The parts, so the total is never a black box. Money sent to
+              investments is counted once — as what the holdings are worth,
+              not also as the cash that bought them. */}
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            {[
+              ['Free to spend', worth.spendable, ''],
+              ['In savings', worth.pot, 'text-save'],
+              ['Invested', worth.investments, 'text-invest'],
+            ].map(([label, value, tone]) => (
+              <div key={label}>
+                <div className="text-[10px] uppercase tracking-wider text-faint leading-tight">{label}</div>
+                <div className={`text-[14px] font-semibold display tabular mt-0.5 ${tone}`}>
+                  <Money value={value} compact />
+                </div>
+              </div>
+            ))}
           </div>
+
+          {worth.untracked > 0 && (
+            <p className="text-[11px] text-warn mt-2.5 leading-relaxed">
+              <Money value={worth.untracked} compact /> was moved to investments but has no holding
+              recorded, so it is not counted above.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col md:flex-row items-center gap-6">

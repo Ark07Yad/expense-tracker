@@ -31,6 +31,17 @@ const initialState = {
     savingsTargetPct: 20,
     /** Monthly ceiling per expense category: { [categoryId]: amount }. */
     budgets: {},
+
+    /**
+     * What you already had the day you started tracking.
+     *
+     * Without these the balance is not your money, only the part of it this app
+     * has watched — useless to anyone who did not open the app on the day they
+     * opened their first account. `openingSavings` is how much of that opening
+     * balance was already set aside.
+     */
+    openingBalance: 0,
+    openingSavings: 0,
   },
 
   /**

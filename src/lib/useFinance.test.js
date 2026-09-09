@@ -15,7 +15,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   balanceAt, budgetForPeriod, budgetLines, byCategory, computeFinance,
-  computeInvestments, entriesInRange, movers, seriesOf, totalsOf,
+  computeInvestments, entriesInRange, monthlyBreakdown, movers, netWorthOf,
+  seriesOf, totalsOf,
 } from './useFinance';
 import { addMonthKeys, monthKey, todayKey } from './calc';
 
@@ -154,7 +155,125 @@ describe('balanceAt', () => {
   });
 
   it('is empty-safe', () => {
-    expect(balanceAt([], '2020-06-30')).toEqual({ balance: 0, pot: 0, spendable: 0 });
+    expect(balanceAt([], '2020-06-30')).toMatchObject({ balance: 0, pot: 0, spendable: 0 });
+  });
+
+  it('starts from what you already had', () => {
+    // Otherwise the balance is not your money, only the part this app watched.
+    const at = balanceAt(ledger, '2020-06-30', { balance: 5000, savings: 2000 });
+    expect(at.balance).toBe(6500);
+    expect(at.pot).toBe(2500);
+    expect(at.spendable).toBe(4000);
+  });
+
+  it('ignores a negative opening balance rather than subtracting it', () => {
+    expect(balanceAt([], '2020-06-30', { balance: -100 }).balance).toBe(0);
+  });
+
+  it('tracks what was sent to investments separately', () => {
+    // The one figure that lives in two ledgers: it left the bank and reappears
+    // as a holding, so anything summing the two has to know about it.
+    const withInvest = [...ledger, entry('2020-06-15', 'saving', 'invest-transfer', 300)];
+    const at = balanceAt(withInvest, '2020-06-30');
+    expect(at.pot).toBe(800);
+    expect(at.toInvestments).toBe(300);
+  });
+});
+
+describe('netWorthOf', () => {
+  const asset = (invested, value) => ({
+    id: 'f', name: 'Fund', class: 'fund', note: '', createdAt: 1,
+    history: { [monthKey(todayKey())]: { contributed: invested, value } },
+  });
+
+  it('counts money sent to investments once, not twice', () => {
+    // Earn 1000, send 500 to investments, the holding is worth 600.
+    // Cash 500 + holdings 600 = 1100 — not 1000 + 600.
+    const state = baseState({
+      entries: [
+        entry(todayKey(), 'earning', 'salary', 1000),
+        entry(todayKey(), 'saving', 'invest-transfer', 500),
+      ],
+      assets: [asset(500, 600)],
+    });
+    const w = netWorthOf(state);
+    expect(w.cash).toBe(500);
+    expect(w.investments).toBe(600);
+    expect(w.netWorth).toBe(1100);
+    expect(w.untracked).toBe(0);
+  });
+
+  it('adds a holding funded before tracking began, without subtracting anything', () => {
+    const state = baseState({
+      entries: [entry(todayKey(), 'earning', 'salary', 1000)],
+      assets: [asset(500, 600)],
+    });
+    const w = netWorthOf(state);
+    expect(w.cash).toBe(1000);
+    expect(w.netWorth).toBe(1600);
+  });
+
+  it('flags money sent to investments with no holding recorded', () => {
+    // Not an error, but the one case where the total understates what you own.
+    const state = baseState({
+      entries: [
+        entry(todayKey(), 'earning', 'salary', 1000),
+        entry(todayKey(), 'saving', 'invest-transfer', 400),
+      ],
+    });
+    const w = netWorthOf(state);
+    expect(w.untracked).toBe(400);
+    expect(w.hasInvestments).toBe(false);
+  });
+
+  it('includes the opening balance', () => {
+    const state = baseState({ profile: { openingBalance: 2000, openingSavings: 800 } });
+    const w = netWorthOf(state);
+    expect(w.netWorth).toBe(2000);
+    expect(w.pot).toBe(800);
+    expect(w.spendable).toBe(1200);
+  });
+
+  it('is empty-safe', () => {
+    expect(netWorthOf(baseState())).toMatchObject({ netWorth: 0, cash: 0, investments: 0 });
+  });
+});
+
+describe('monthlyBreakdown', () => {
+  it('separates salary from anything else that came in', () => {
+    // One combined "earned" figure cannot tell a changed salary from a bonus.
+    const state = baseState({
+      entries: [
+        entry(todayKey(), 'earning', 'salary', 2000),
+        entry(todayKey(), 'earning', 'freelance', 500),
+        entry(todayKey(), 'expense', 'dining', 300),
+      ],
+    });
+    const rows = monthlyBreakdown(state, 3);
+    const now = rows[rows.length - 1];
+    expect(now.salary).toBe(2000);
+    expect(now.otherIncome).toBe(500);
+    expect(now.expense).toBe(300);
+    expect(now.saved).toBe(2200);
+    expect(now.isCurrent).toBe(true);
+  });
+
+  it('carries the running balance on each row', () => {
+    const state = baseState({
+      entries: [entry(todayKey(), 'earning', 'salary', 1000)],
+      profile: { openingBalance: 500 },
+    });
+    const rows = monthlyBreakdown(state, 3);
+    expect(rows[rows.length - 1].balance).toBe(1500);
+  });
+
+  it('drops the empty months before anything was logged', () => {
+    const state = baseState({ entries: [entry(todayKey(), 'earning', 'salary', 100)] });
+    expect(monthlyBreakdown(state, 12)).toHaveLength(1);
+  });
+
+  it('is empty-safe', () => {
+    expect(monthlyBreakdown(baseState(), 6).length).toBeGreaterThanOrEqual(0);
   });
 });
 
