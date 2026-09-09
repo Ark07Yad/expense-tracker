@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
-import { KINDS, categoriesFor, categoryById, kindById } from '../lib/data';
+import { KINDS, categoriesFor, categoryById, kindById, prefixFor } from '../lib/data';
 import { dayLabel, formatMoney, todayKey } from '../lib/calc';
 import {
   FREQUENCIES, describeRule, dueList, dueTotals, nextOccurrence,
@@ -123,7 +123,7 @@ export function DueQueue({ toast, onNavigate }) {
               </div>
 
               <div className={`text-[13.5px] font-semibold tabular shrink-0 ${KIND_TEXT[kind.tone]}`}>
-                {kind.sign > 0 ? '+' : '−'}
+                {prefixFor(kind.id)}
                 <Money value={item.rule.amount} />
               </div>
             </button>
@@ -252,7 +252,7 @@ export function ScheduledList({ toast }) {
                 {!rule.active && <Badge tone="neutral">Paused</Badge>}
 
                 <div className={`text-[13.5px] font-semibold tabular shrink-0 ${KIND_TEXT[kind.tone]} ${rule.active ? '' : 'opacity-40'}`}>
-                  {kind.sign > 0 ? '+' : '−'}
+                  {prefixFor(kind.id)}
                   {formatMoney(rule.amount, cur)}
                 </div>
 
@@ -373,7 +373,7 @@ export function RecurringSheet({ open, editing, onClose, onSaved }) {
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {KINDS.map((k) => {
             const active = draft.kind === k.id;
             return (

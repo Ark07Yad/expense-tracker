@@ -283,13 +283,26 @@ export function formatMoney(value, code = 'INR', { compact = false, decimals, si
 
   let out;
   try {
-    out = new Intl.NumberFormat(cur.locale, {
+    const options = {
       style: 'currency',
       currency: cur.code,
       notation: compact && abs >= 1000 ? 'compact' : 'standard',
       minimumFractionDigits: compact ? 0 : digits,
       maximumFractionDigits: digits,
-    }).format(abs);
+    };
+    const parts = new Intl.NumberFormat(cur.locale, options).formatToParts(abs);
+
+    /*
+     * A fraction digit only earns its place when the number was actually
+     * abbreviated. Not every locale abbreviates currency — German returns the
+     * full figure — and asking for one decimal there produces "3166,7 €", which
+     * is neither short nor a sensible way to write money.
+     */
+    const abbreviated = parts.some((p) => p.type === 'compact');
+    out =
+      compact && !abbreviated
+        ? new Intl.NumberFormat(cur.locale, { ...options, maximumFractionDigits: 0 }).format(abs)
+        : parts.map((p) => p.value).join('');
   } catch {
     out = `${cur.symbol}${abs.toFixed(digits)}`;
   }

@@ -242,7 +242,7 @@ function buildSection(state, section) {
           tone: 'bad',
           icon: 'alert',
           title: `You are ${money(Math.abs(t.net))} beyond what came in`,
-          body: `${money(t.earning)} in, ${money(t.expense)} out, ${money(t.saving)} moved to savings. The gap has to come from somewhere — usually last month's cushion or a card.`,
+          body: `${money(t.earning)} came in and ${money(t.expense)} went out. The difference has to come from somewhere — last month's balance, or a card.`,
           priority: 0,
         });
       } else if (target > 0 && t.savingsRate < target) {
@@ -582,7 +582,7 @@ function buildSection(state, section) {
       title: t.saving > 0 ? `${money(t.saving)} set aside this month` : 'Nothing set aside yet this month',
       body:
         t.earning > 0
-          ? `That is ${formatPercent((t.saving / t.earning) * 100)} of the ${money(t.earning)} that came in. Counting what is simply left over as well, you are keeping ${formatPercent(t.savingsRate)}.`
+          ? `That is ${formatPercent((t.saving / t.earning) * 100)} of the ${money(t.earning)} that came in. Across everything, you kept ${formatPercent(t.savingsRate)} of your income this month.`
           : 'Log your income too and this becomes a rate rather than a raw number.',
       priority: t.saving > 0 ? 4 : 2,
     });

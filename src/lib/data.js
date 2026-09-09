@@ -32,17 +32,46 @@ export const KINDS = [
   },
   {
     id: 'saving',
-    label: 'Saving',
-    plural: 'Savings',
-    verb: 'saved',
+    label: 'Set aside',
+    plural: 'Set aside',
+    verb: 'set aside',
     icon: 'piggy',
     tone: 'save',
-    sign: -1,
-    blurb: 'Money set aside on purpose. It leaves your account but stays yours.',
+    /**
+     * Zero, because setting money aside does not make you poorer.
+     *
+     * This used to be -1, and that single number was the source of most of the
+     * confusion in this app: a transfer to a savings pot was treated as though
+     * the money had gone, so nothing accumulated, every month restarted from
+     * zero, and putting aside more than you earned made the month look like a
+     * disaster. Moving money between your own pots is a transfer, not a loss.
+     */
+    sign: 0,
+    blurb: 'Money moved into a savings pot. Still yours — it just stops being spending money.',
+  },
+  {
+    id: 'withdrawal',
+    label: 'Take out',
+    plural: 'Taken out',
+    verb: 'took out',
+    icon: 'undo',
+    tone: 'invest',
+    sign: 0,
+    blurb: 'Money taken back out of savings, to spend or to use for something.',
   },
 ];
 
 export const kindById = (id) => KINDS.find((k) => k.id === id) || KINDS[1];
+
+/**
+ * What to put in front of an amount in a list.
+ *
+ * Savings and withdrawals are transfers between your own pots, so a minus sign
+ * would say the money is gone when it is merely somewhere else. Arrows say
+ * which way it moved without implying it was lost.
+ */
+export const KIND_PREFIX = { earning: '+', expense: '−', saving: '→', withdrawal: '←' };
+export const prefixFor = (kind) => KIND_PREFIX[kind] ?? '−';
 
 /* ──────────────────────────────── Categories ──────────────────────────────── */
 
@@ -90,7 +119,13 @@ export const CATEGORIES = {
   ],
 };
 
-export const categoriesFor = (kind) => CATEGORIES[kind] || CATEGORIES.expense;
+/**
+ * A withdrawal answers "out of which pot?", which is the same list a saving
+ * answers "into which pot?" — so they deliberately share one set rather than
+ * having a near-duplicate that can drift.
+ */
+export const categoriesFor = (kind) =>
+  kind === 'withdrawal' ? CATEGORIES.saving : CATEGORIES[kind] || CATEGORIES.expense;
 
 const CATEGORY_INDEX = Object.fromEntries(
   Object.values(CATEGORIES).flat().map((c) => [c.id, c])

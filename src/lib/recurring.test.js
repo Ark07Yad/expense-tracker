@@ -139,7 +139,7 @@ describe('dueTotals', () => {
       { rule: rule({ kind: 'earning', amount: 5000 }) },
       { rule: rule({ kind: 'saving', amount: 500 }) },
     ];
-    expect(dueTotals(items)).toEqual({ earning: 5000, expense: 1000, saving: 500, count: 3 });
+    expect(dueTotals(items)).toEqual({ earning: 5000, expense: 1000, saving: 500, withdrawal: 0, count: 3 });
   });
 });
 

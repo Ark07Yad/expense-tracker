@@ -128,11 +128,12 @@ export function dueList(state, today = todayKey()) {
 
 /** Total value of what is pending, split by kind — for the review summary. */
 export function dueTotals(items) {
-  const t = { earning: 0, expense: 0, saving: 0, count: items.length };
+  const t = { earning: 0, expense: 0, saving: 0, withdrawal: 0, count: items.length };
   for (const { rule } of items) {
     const amount = Math.abs(Number(rule.amount) || 0);
     if (rule.kind === 'earning') t.earning += amount;
     else if (rule.kind === 'saving') t.saving += amount;
+    else if (rule.kind === 'withdrawal') t.withdrawal += amount;
     else t.expense += amount;
   }
   return t;

@@ -218,7 +218,7 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
     >
       <div className="space-y-4">
         {/* Kind — recolours everything below it. */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {KINDS.map((k) => {
             const active = draft.kind === k.id;
             return (

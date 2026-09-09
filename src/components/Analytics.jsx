@@ -120,6 +120,22 @@ export default function Analytics({ onNavigate }) {
           )}
         </div>
 
+        <div className="surface rounded-2xl p-3.5 mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span className="text-[12px] text-dim">
+            Balance went from{' '}
+            <span className="tabular text-[color:var(--text)]">
+              <Money value={f.opening.balance} compact />
+            </span>{' '}
+            to{' '}
+            <span className="tabular font-semibold text-[color:var(--text)]">
+              <Money value={f.closing.balance} compact />
+            </span>
+          </span>
+          <span className="text-[11.5px] text-faint tabular">
+            <Money value={f.closing.pot} compact /> of it in savings
+          </span>
+        </div>
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-4">
           <Stat
             label="Earned" icon="trendUp" tone="earn"
@@ -132,14 +148,14 @@ export default function Analytics({ onNavigate }) {
             delta={f.delta.expense} invertDelta sub={`vs ${p.compare}`}
           />
           <Stat
-            label="Saved" icon="piggy" tone="save"
+            label="Set aside" icon="piggy" tone="save"
             value={<Money value={f.totals.saving} compact animate />}
             delta={f.delta.saving} sub={`vs ${p.compare}`}
           />
           <Stat
-            label="Left over" icon="scale" tone={f.totals.net >= 0 ? 'good' : 'bad'}
-            value={<Money value={f.totals.net} compact animate sign />}
-            sub={f.totals.earning > 0 ? `${formatPercent(f.totals.savingsRate)} kept` : 'no income logged'}
+            label="Kept" icon="scale" tone={f.totals.saved >= 0 ? 'good' : 'bad'}
+            value={<Money value={f.totals.saved} compact animate sign />}
+            sub={f.totals.earning > 0 ? `${formatPercent(f.totals.savingsRate)} of what came in` : 'no income logged'}
           />
         </div>
       </Card>

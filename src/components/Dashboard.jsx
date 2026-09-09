@@ -13,7 +13,7 @@ import { Suspense, lazy, useMemo } from 'react';
 import { useStore } from '../lib/store';
 import { useDailySpend, useFinance, useInvestments } from '../lib/useFinance';
 import { headlineSuggestions } from '../lib/insights';
-import { categoryById, kindById } from '../lib/data';
+import { categoryById, kindById, prefixFor } from '../lib/data';
 import { dayLabel, formatMoney, formatPercent, shortDate } from '../lib/calc';
 
 /**
@@ -21,7 +21,7 @@ import { dayLabel, formatMoney, formatPercent, shortDate } from '../lib/calc';
  * tone-to-class map has to be written out rather than built with a template
  * string. Every dynamic accent in this app goes through a lookup like this one.
  */
-const KIND_TEXT = { earn: 'text-earn', spend: 'text-spend', save: 'text-save' };
+const KIND_TEXT = { earn: 'text-earn', spend: 'text-spend', save: 'text-save', invest: 'text-invest' };
 import {
   Badge, Bar, Button, Card, CategoryDot, Delta, Empty, Icon, Money, Ring,
   SectionTitle, Stat, stagger,
@@ -103,18 +103,36 @@ export default function Dashboard({ onNavigate }) {
               {f.label} · {formatPercent(f.progress * 100)} through the month
             </p>
           </div>
-          {/*
-            * Three states, not two. A month with nothing spent and a large
-            * transfer to savings is in the red, but calling it "Overspent" is
-            * false — the money was set aside, not spent, and the shortfall came
-            * from an earlier balance.
-            */}
-          <Badge
-            tone={f.totals.net >= 0 ? 'good' : f.totals.overspent ? 'bad' : 'warn'}
-            className="shrink-0 mt-1"
-          >
-            {f.totals.net >= 0 ? 'In the black' : f.totals.overspent ? 'Overspent' : 'More out than in'}
+          <Badge tone={f.totals.saved >= 0 ? 'good' : 'bad'} className="shrink-0 mt-1">
+            {f.totals.saved >= 0 ? 'Saving this month' : 'Overspent'}
           </Badge>
+        </div>
+
+        {/*
+          * Total balance, carried forward.
+          *
+          * The number people actually want, and the one the app never showed:
+          * everything earned less everything spent, across every month, not
+          * reset on the 1st.
+          */}
+        <div className="surface rounded-2xl p-4 mb-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] uppercase tracking-wider text-faint">Total balance</span>
+            <span className="text-[11.5px] text-faint tabular">
+              started the month at <Money value={f.opening.balance} compact />
+            </span>
+          </div>
+          <div className="text-[30px] font-semibold display leading-none mt-1.5">
+            <Money value={f.closing.balance} animate />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-faint mt-2">
+            <span>
+              <Money value={f.closing.pot} compact className="text-save" /> in savings
+            </span>
+            <span>
+              <Money value={f.closing.spendable} compact /> free to spend
+            </span>
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row items-center gap-6">
@@ -155,8 +173,12 @@ export default function Dashboard({ onNavigate }) {
                 delta={f.delta.expense}
                 invertDelta
               />
+              {/* "Set aside", not "Saved". With "Kept this month" directly
+                  below, two tiles both called saved — one meaning the pot,
+                  one meaning income less spending — is the ambiguity this
+                  whole model was rebuilt to remove. */}
               <Stat
-                label="Saved"
+                label="Set aside"
                 icon="piggy"
                 tone="save"
                 value={<Money value={f.totals.saving} compact animate />}
@@ -164,11 +186,32 @@ export default function Dashboard({ onNavigate }) {
               />
             </div>
 
+            {/*
+              * The month stated as one sentence of arithmetic.
+              *
+              * Earned, minus spent, equals kept — and then what that does to
+              * the running total. Everything the old "leftover" tile was
+              * gesturing at, without the third quantity nobody could define.
+              */}
             <div className="surface rounded-2xl p-3.5">
-              <div className="flex items-baseline justify-between gap-3 mb-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[12px] text-dim">Kept this month</span>
+                <span className={`text-[15px] font-semibold display tabular ${f.totals.saved >= 0 ? 'text-good' : 'text-bad'}`}>
+                  <Money value={f.totals.saved} sign />
+                </span>
+              </div>
+              <p className="text-[11.5px] text-faint mt-1 tabular">
+                <Money value={f.totals.earning} compact /> in −{' '}
+                <Money value={f.totals.expense} compact /> spent
+              </p>
+
+              <div className="flex items-baseline justify-between gap-3 mt-3 mb-2">
                 <span className="text-[12px] text-dim">
-                  Keeping <span className="font-semibold text-[color:var(--text)]">{formatPercent(f.totals.savingsRate)}</span> of
-                  what you earn
+                  Keeping{' '}
+                  <span className="font-semibold text-[color:var(--text)]">
+                    {formatPercent(f.totals.savingsRate)}
+                  </span>{' '}
+                  of what you earn
                 </span>
                 <span className="text-[11.5px] text-faint tabular">
                   target {formatPercent(state.profile.savingsTargetPct || 0)}
@@ -181,18 +224,6 @@ export default function Dashboard({ onNavigate }) {
                 overTone="good"
                 compact
               />
-              <div className="flex items-center justify-between text-[11.5px] mt-2.5">
-                <span className="text-faint">
-                  {f.totals.net >= 0
-                    ? 'Unspent so far'
-                    : f.totals.overspent
-                    ? 'Beyond what came in'
-                    : 'Set aside beyond this month'}
-                </span>
-                <span className={`tabular font-medium ${f.totals.net >= 0 ? 'text-good' : 'text-bad'}`}>
-                  <Money value={Math.abs(f.totals.net)} />
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -441,7 +472,7 @@ export default function Dashboard({ onNavigate }) {
                     </div>
                   </div>
                   <div className={`text-[13.5px] font-semibold tabular shrink-0 ${KIND_TEXT[kind.tone]}`}>
-                    {kind.sign > 0 ? '+' : '−'}
+                    {prefixFor(kind.id)}
                     <Money value={e.amount} />
                   </div>
                 </div>

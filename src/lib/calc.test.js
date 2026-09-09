@@ -229,6 +229,16 @@ describe('formatMoney', () => {
     expect(formatMoney(125000, 'INR')).toBe('₹1,25,000');
   });
 
+  it('drops the decimal where a locale does not abbreviate', () => {
+    // German writes currency out in full, so asking for one decimal produced
+    // "3166,7 €" — neither short nor a sensible way to write money.
+    // Compared loosely on whitespace: Intl separates the amount from the
+    // symbol with a non-breaking space, which is invisible in a diff.
+    const out = formatMoney(3166.7, 'EUR', { compact: true });
+    expect(out).not.toMatch(/,\d/);
+    expect(out.replace(/\s/g, ' ')).toBe('3167 €');
+  });
+
   it('abbreviates compactly in the local convention', () => {
     expect(formatMoney(125000, 'INR', { compact: true })).toBe('₹1.3L');
     expect(formatMoney(2500000, 'INR', { compact: true })).toBe('₹25L');

@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { animateOut, stagger, useFlipList } from '../lib/motion';
-import { KINDS, categoriesFor, categoryById, kindById } from '../lib/data';
+import { KINDS, categoriesFor, categoryById, kindById, prefixFor } from '../lib/data';
 import { addDays, dayLabel, formatMoney, parseKey, todayKey } from '../lib/calc';
 import { totalsOf } from '../lib/useFinance';
 import EntrySheet from './EntrySheet';
@@ -427,7 +427,7 @@ function EntryRow({ entry, index, onEdit, dispatch, toast, onView }) {
 
       <div className="text-right shrink-0">
         <div className={`text-[13.5px] font-semibold tabular ${KIND_TEXT[kind.tone]}`}>
-          {kind.sign > 0 ? '+' : '−'}
+          {prefixFor(kind.id)}
           <Money value={entry.amount} />
         </div>
       </div>

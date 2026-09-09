@@ -497,9 +497,12 @@ export function Stat({ label, value, icon, tone = 'default', sub, delta, invertD
         onClick ? 'transition-all hover:[background:var(--surface-hover)] active:scale-[0.98]' : ''
       }`}
     >
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-faint mb-1.5">
-        {icon && <Icon name={icon} className="size-3.5" />}
-        <span className="truncate">{label}</span>
+      <div className="flex items-start gap-1.5 text-[11px] uppercase tracking-wider text-faint mb-1.5">
+        {icon && <Icon name={icon} className="size-3.5 shrink-0 mt-px" />}
+        {/* Wraps rather than truncates. These labels are two or three words at
+            most, and a tile a third of a phone screen wide cut "Set aside" to
+            "Set as…" — hiding the only thing that says what the number is. */}
+        <span className="leading-tight">{label}</span>
       </div>
       <div className={`text-[21px] font-semibold display leading-none ${TONE_TEXT[tone]}`}>{value}</div>
       <div className="flex items-center gap-2 mt-1.5 min-h-[16px]">

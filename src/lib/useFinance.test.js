@@ -14,8 +14,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  budgetForPeriod, budgetLines, byCategory, computeFinance, computeInvestments,
-  entriesInRange, movers, seriesOf, totalsOf,
+  balanceAt, budgetForPeriod, budgetLines, byCategory, computeFinance,
+  computeInvestments, entriesInRange, movers, seriesOf, totalsOf,
 } from './useFinance';
 import { addMonthKeys, monthKey, todayKey } from './calc';
 
@@ -36,7 +36,11 @@ const baseState = (over = {}) => ({
 });
 
 describe('totalsOf', () => {
-  it('splits the three kinds and treats savings as money that has left', () => {
+  it('treats money set aside as a transfer, not a loss', () => {
+    // The correction at the heart of this model. Moving money into a savings
+    // pot changes where it sits, not how much of it there is — counting it as
+    // an outflow made every month restart from zero and made a month of
+    // diligent saving look like a month of loss.
     const t = totalsOf([
       entry('2020-06-01', 'earning', 'salary', 1000),
       entry('2020-06-02', 'expense', 'dining', 300),
@@ -45,65 +49,61 @@ describe('totalsOf', () => {
     expect(t.earning).toBe(1000);
     expect(t.expense).toBe(300);
     expect(t.saving).toBe(200);
-    // Net is what is genuinely unallocated: savings are committed, not spare.
-    expect(t.net).toBe(500);
-    expect(t.outflow).toBe(500);
+    // Kept = in − spent. The 200 is still yours, so it does not appear here.
+    expect(t.saved).toBe(700);
+    expect(t.net).toBe(700);
+    expect(t.outflow).toBe(300);
     expect(t.count).toBe(3);
   });
 
-  it('counts both deliberate savings and the leftover in the savings rate', () => {
+  it('nets withdrawals against what was set aside', () => {
+    const t = totalsOf([
+      entry('2020-06-01', 'earning', 'salary', 1000),
+      entry('2020-06-02', 'saving', 'emergency', 300),
+      entry('2020-06-03', 'withdrawal', 'emergency', 100),
+    ]);
+    expect(t.setAside).toBe(200);
+    // Taking money back out of your own pot is not income.
+    expect(t.saved).toBe(1000);
+    expect(t.earning).toBe(1000);
+  });
+
+  it('measures the rate against what was not spent', () => {
     const t = totalsOf([
       entry('2020-06-01', 'earning', 'salary', 1000),
       entry('2020-06-02', 'expense', 'dining', 300),
-      entry('2020-06-03', 'saving', 'emergency', 200),
     ]);
-    expect(t.savingsRate).toBe(70); // (200 saved + 500 left) / 1000
+    expect(t.savingsRate).toBe(70);
   });
 
   it('never claims you kept more than you earned', () => {
-    // Moving more into savings than arrived is possible — the surplus comes
-    // from an earlier balance — but "keeping 137% of what you earn" turned a
-    // month in the red into what read as a triumph.
+    // Setting aside more than arrived is possible — the surplus comes from an
+    // earlier balance — and must not read as keeping over 100% of income.
     const t = totalsOf([
       entry('2020-06-01', 'earning', 'salary', 502),
       entry('2020-06-02', 'saving', 'emergency', 687),
     ]);
     expect(t.savingsRate).toBe(100);
-    expect(t.net).toBe(-185);
-    expect(t.beyondIncome).toBe(185);
-    // Nothing was spent, so this is not overspending.
+    // Nothing was spent, so nothing was lost and the month is not in the red.
+    expect(t.saved).toBe(502);
+    expect(t.beyondIncome).toBe(0);
     expect(t.overspent).toBe(false);
   });
 
-  it('distinguishes overspending from setting too much aside', () => {
+  it('reports a shortfall only when spending causes it', () => {
     const spent = totalsOf([
       entry('2020-06-01', 'earning', 'salary', 500),
       entry('2020-06-02', 'expense', 'dining', 900),
     ]);
     expect(spent.overspent).toBe(true);
     expect(spent.beyondIncome).toBe(400);
-
-    const saved = totalsOf([
-      entry('2020-06-01', 'earning', 'salary', 500),
-      entry('2020-06-02', 'saving', 'goal', 900),
-    ]);
-    expect(saved.overspent).toBe(false);
-    expect(saved.beyondIncome).toBe(400);
-  });
-
-  it('reports no overshoot in a healthy month', () => {
-    const t = totalsOf([
-      entry('2020-06-01', 'earning', 'salary', 1000),
-      entry('2020-06-02', 'expense', 'dining', 300),
-    ]);
-    expect(t.beyondIncome).toBe(0);
-    expect(t.overspent).toBe(false);
+    expect(spent.saved).toBe(-400);
   });
 
   it('does not divide by zero when nothing came in', () => {
     const t = totalsOf([entry('2020-06-02', 'expense', 'dining', 300)]);
     expect(t.savingsRate).toBe(0);
-    expect(t.net).toBe(-300);
+    expect(t.saved).toBe(-300);
   });
 
   it('takes the magnitude of an amount, whatever sign it was stored with', () => {
@@ -111,7 +111,50 @@ describe('totalsOf', () => {
   });
 
   it('is empty-safe', () => {
-    expect(totalsOf([])).toMatchObject({ earning: 0, expense: 0, saving: 0, net: 0, count: 0 });
+    expect(totalsOf([])).toMatchObject({ earning: 0, expense: 0, saving: 0, saved: 0, count: 0 });
+  });
+});
+
+describe('balanceAt', () => {
+  // The carry-forward the app was missing. A month's saving only means
+  // something as part of a total that survives the 1st.
+  const ledger = [
+    entry('2020-05-01', 'earning', 'salary', 1000),
+    entry('2020-05-10', 'expense', 'dining', 200),
+    entry('2020-05-15', 'saving', 'emergency', 500),
+    entry('2020-06-01', 'earning', 'salary', 1000),
+    entry('2020-06-10', 'expense', 'dining', 300),
+  ];
+
+  it('accumulates across months instead of restarting', () => {
+    expect(balanceAt(ledger, '2020-05-31').balance).toBe(800);
+    expect(balanceAt(ledger, '2020-06-30').balance).toBe(1500);
+  });
+
+  it('tracks the savings pot separately from the total', () => {
+    const at = balanceAt(ledger, '2020-06-30');
+    expect(at.balance).toBe(1500);
+    expect(at.pot).toBe(500);
+    // What is left to spend without dipping into savings.
+    expect(at.spendable).toBe(1000);
+  });
+
+  it('lets a withdrawal move money back out of the pot', () => {
+    const withDraw = [...ledger, entry('2020-06-20', 'withdrawal', 'emergency', 200)];
+    const at = balanceAt(withDraw, '2020-06-30');
+    // The total is untouched — the money simply stopped being earmarked.
+    expect(at.balance).toBe(1500);
+    expect(at.pot).toBe(300);
+    expect(at.spendable).toBe(1200);
+  });
+
+  it('counts only up to the date asked for', () => {
+    expect(balanceAt(ledger, '2020-05-09').balance).toBe(1000);
+    expect(balanceAt(ledger, '2020-04-30').balance).toBe(0);
+  });
+
+  it('is empty-safe', () => {
+    expect(balanceAt([], '2020-06-30')).toEqual({ balance: 0, pot: 0, spendable: 0 });
   });
 });
 
@@ -353,6 +396,16 @@ describe('computeFinance', () => {
   it('finds the biggest single expense, ignoring larger income', () => {
     expect(f.biggest.amount).toBe(1500);
     expect(f.biggest.category).toBe('housing');
+  });
+
+  it('carries a balance in and out of the period', () => {
+    // May's 200 of spending is still there on 1 June — which is the whole
+    // point. The old model reset to zero every month and lost it.
+    expect(f.opening.balance).toBe(-200);
+    expect(f.closing.balance).toBe(-200 + 5000 - 1900);
+    // The 1,000 set aside is part of the balance, earmarked rather than gone.
+    expect(f.closing.pot).toBe(1000);
+    expect(f.closing.spendable).toBe(f.closing.balance - 1000);
   });
 
   it('knows a past period is not the current one', () => {

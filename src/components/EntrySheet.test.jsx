@@ -85,8 +85,8 @@ describe('switching kind', () => {
     seed();
     const { user } = open();
     expect(saveButton()).toHaveTextContent('Log expense');
-    await user.click(screen.getByRole('button', { name: /^Saving/ }));
-    expect(saveButton()).toHaveTextContent('Log saving');
+    await user.click(screen.getByRole('button', { name: /^Set aside/ }));
+    expect(saveButton()).toHaveTextContent('Log set aside');
   });
 });
 
@@ -101,7 +101,7 @@ describe('goal tagging', () => {
     const { user } = open();
 
     expect(screen.queryByText('Toward a goal')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^Saving/ }));
+    await user.click(screen.getByRole('button', { name: /^Set aside/ }));
     expect(screen.getByText('Toward a goal')).toBeInTheDocument();
   });
 
@@ -111,7 +111,7 @@ describe('goal tagging', () => {
     withGoal();
     const { user } = open();
 
-    await user.click(screen.getByRole('button', { name: /^Saving/ }));
+    await user.click(screen.getByRole('button', { name: /^Set aside/ }));
     await user.type(amountField(), '400');
     await user.click(screen.getByRole('button', { name: /Japan trip/ }));
     await user.click(saveButton());
@@ -123,7 +123,7 @@ describe('goal tagging', () => {
     withGoal();
     const { user } = open();
 
-    await user.click(screen.getByRole('button', { name: /^Saving/ }));
+    await user.click(screen.getByRole('button', { name: /^Set aside/ }));
     await user.click(screen.getByRole('button', { name: /Japan trip/ }));
     await user.click(screen.getByRole('button', { name: /^Expense/ }));
     await user.type(amountField(), '100');

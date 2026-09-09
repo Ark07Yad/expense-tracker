@@ -17,10 +17,16 @@
 
 import { daysBetween, todayKey } from './calc';
 
-/** Contributions tagged to a goal. */
+/** Contributions tagged to a goal. Withdrawals count against it. */
 export function contributionsFor(state, goalId) {
-  return (state.entries || []).filter((e) => e.kind === 'saving' && e.goalId === goalId);
+  return (state.entries || []).filter(
+    (e) => (e.kind === 'saving' || e.kind === 'withdrawal') && e.goalId === goalId
+  );
 }
+
+/** Signed value of one tagged entry: a withdrawal takes money back out. */
+const contributionValue = (e) =>
+  (e.kind === 'withdrawal' ? -1 : 1) * Math.abs(Number(e.amount) || 0);
 
 /**
  * Months between now and a deadline, as a fraction and never below zero.
@@ -37,9 +43,11 @@ function monthsUntil(deadline, today) {
 
 export function goalProgress(state, goal, today = todayKey()) {
   const contributions = contributionsFor(state, goal.id);
-  const contributed = contributions.reduce((n, e) => n + Math.abs(Number(e.amount) || 0), 0);
+  const contributed = contributions.reduce((n, e) => n + contributionValue(e), 0);
   const opening = Math.max(0, Number(goal.opening) || 0);
-  const saved = opening + contributed;
+  // Never below zero: taking out more than was ever put in is a data mistake,
+  // not a negative goal.
+  const saved = Math.max(0, opening + contributed);
   const target = Math.max(0, Number(goal.target) || 0);
   const remaining = Math.max(0, target - saved);
   const pct = target > 0 ? Math.min(100, (saved / target) * 100) : 0;
@@ -57,8 +65,8 @@ export function goalProgress(state, goal, today = todayKey()) {
   /** What recent behaviour would actually deliver, from the last 90 days. */
   const since = daysBetween(today, todayKey()) === 0 ? today : today;
   const recent = contributions.filter((e) => daysBetween(e.date, since) <= 90 && e.date <= since);
-  const recentTotal = recent.reduce((n, e) => n + Math.abs(Number(e.amount) || 0), 0);
-  const perMonthRecent = recent.length ? recentTotal / 3 : 0;
+  const recentTotal = recent.reduce((n, e) => n + contributionValue(e), 0);
+  const perMonthRecent = recent.length ? Math.max(0, recentTotal / 3) : 0;
 
   const monthsAtCurrentRate = perMonthRecent > 0 && remaining > 0 ? remaining / perMonthRecent : null;
 

@@ -16,6 +16,7 @@ import { useMemo } from 'react';
 import { useStore } from './store';
 import { assetClassById, categoriesFor, categoryById } from './data';
 import {
+  addDays,
   addMonthKeys,
   bucketsOf,
   daysBetween,
@@ -36,49 +37,71 @@ export const entriesInRange = (entries, range) =>
   entries.filter((e) => e.date >= range.start && e.date <= range.end);
 
 export function totalsOf(entries) {
-  const t = { earning: 0, expense: 0, saving: 0, count: entries.length };
+  const t = { earning: 0, expense: 0, saving: 0, withdrawal: 0, count: entries.length };
   for (const e of entries) {
     const amount = Math.abs(Number(e.amount) || 0);
     if (e.kind === 'earning') t.earning += amount;
     else if (e.kind === 'saving') t.saving += amount;
+    else if (e.kind === 'withdrawal') t.withdrawal += amount;
     else t.expense += amount;
   }
+
   /**
-   * Net is what is left unallocated: income minus spending minus what you
-   * deliberately moved to savings.
+   * What you kept: what came in, less what you spent.
    *
-   * Savings are subtracted rather than ignored because the money really has
-   * left the current account — treating a transfer to a fund as "still spare"
-   * is how people end up double-spending it. `free` is the honest headline:
-   * a positive number is genuinely uncommitted.
+   * Nothing else belongs in this subtraction. Moving money into a savings pot
+   * is a transfer between your own pots — it changes where the money sits, not
+   * how much of it there is — so counting it as an outflow made every month
+   * start from zero and made a month of diligent saving look like a month of
+   * loss. Spending is the only thing that actually reduces what you have.
    */
-  t.net = t.earning - t.expense - t.saving;
-  t.free = t.net;
-  t.outflow = t.expense + t.saving;
+  t.saved = t.earning - t.expense;
 
-  /**
-   * The share of income kept, which cannot exceed all of it.
-   *
-   * Moving more into savings than came in is perfectly possible — the surplus
-   * comes from an earlier month's balance — but it is not "keeping 137% of what
-   * you earn", and presenting it that way turned a month in the red into what
-   * read as a triumph. Capped, with the overshoot reported separately as what
-   * it actually is.
-   */
-  t.savingsRate =
-    t.earning > 0 ? Math.min(100, ((t.saving + Math.max(0, t.net)) / t.earning) * 100) : 0;
+  /** Long-standing alias. Same number, and the one every screen reads. */
+  t.net = t.saved;
+  t.free = t.saved;
+  t.outflow = t.expense;
 
-  /** How much left this month beyond what arrived in it. */
-  t.beyondIncome = Math.max(0, -t.net);
+  /** Net movement into the savings pot: put in, less taken back out. */
+  t.setAside = t.saving - t.withdrawal;
 
-  /**
-   * Spending alone exceeded income. Distinguished from `beyondIncome` because
-   * the two need different words: overspending is a problem, moving savings
-   * ahead of payday usually is not.
-   */
+  /** The share of income you did not spend. */
+  t.savingsRate = t.earning > 0 ? Math.min(100, (Math.max(0, t.saved) / t.earning) * 100) : 0;
+
+  /** How much more went out than came in. Only spending can cause this now. */
+  t.beyondIncome = Math.max(0, -t.saved);
   t.overspent = t.expense > t.earning;
 
   return t;
+}
+
+/**
+ * Running balance: everything earned, less everything spent, up to and
+ * including `until`.
+ *
+ * This is the number the app was missing. A month's saving is only meaningful
+ * as part of a total that carries forward — otherwise last month's diligence
+ * disappears on the 1st, which is exactly what it did.
+ */
+export function balanceAt(entries, until) {
+  let balance = 0;
+  let pot = 0;
+  for (const e of entries) {
+    if (until && e.date > until) continue;
+    const amount = Math.abs(Number(e.amount) || 0);
+    if (e.kind === 'earning') balance += amount;
+    else if (e.kind === 'expense') balance -= amount;
+    else if (e.kind === 'saving') pot += amount;
+    else if (e.kind === 'withdrawal') pot -= amount;
+  }
+  return {
+    /** Everything you have. */
+    balance,
+    /** The part of it earmarked in a savings pot. */
+    pot,
+    /** The rest — what is free to spend without touching savings. */
+    spendable: balance - pot,
+  };
 }
 
 /** Per-category breakdown for one kind, largest first. */
@@ -131,6 +154,7 @@ export function seriesOf(period, range, entries, opts = {}) {
       earning: Math.round(t.earning),
       expense: Math.round(t.expense),
       saving: Math.round(t.saving),
+      withdrawal: Math.round(t.withdrawal),
       net: Math.round(t.net),
       cumExpense: Math.round(cumExpense),
       cumNet: Math.round(cumNet),
@@ -273,6 +297,11 @@ export function computeFinance(state, period, offset = 0, anchor = todayKey(), c
 
   const totals = totalsOf(inRange);
   const prevTotals = totalsOf(inPrev);
+
+  // What the running balance was before this period began, and where it stands
+  // at the end of it. Without the opening figure a month has no context at all.
+  const opening = balanceAt(state.entries, addDays(range.start, -1));
+  const closing = balanceAt(state.entries, range.end);
   const expenseCats = byCategory(inRange, 'expense');
   const progress = periodProgress(range, todayKey());
   const elapsedDays = Math.max(1, Math.min(rangeDays(range), daysBetween(range.start, todayKey()) + 1));
@@ -292,6 +321,8 @@ export function computeFinance(state, period, offset = 0, anchor = todayKey(), c
     entries: inRange,
     totals,
     prevTotals,
+    opening,
+    closing,
     delta: {
       earning: pctChange(totals.earning, prevTotals.earning),
       expense: pctChange(totals.expense, prevTotals.expense),
@@ -302,6 +333,7 @@ export function computeFinance(state, period, offset = 0, anchor = todayKey(), c
     expenseCats,
     earningCats: byCategory(inRange, 'earning'),
     savingCats: byCategory(inRange, 'saving'),
+    withdrawalCats: byCategory(inRange, 'withdrawal'),
     movers: movers(expenseCats, byCategory(inPrev, 'expense')),
     budgets: budgetLines(state, period, range, inRange),
     /** Daily burn so far, and where the period lands if nothing changes. */
