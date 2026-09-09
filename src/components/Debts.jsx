@@ -15,7 +15,7 @@ import { DEBT_CLASSES, debtClassById } from '../lib/data';
 import { formatMoney, formatPercent, monthLabel } from '../lib/calc';
 import {
   Badge, Bar, Button, Card, CategoryDot, ConfirmButton, Empty, Field, Icon,
-  IconButton, Input, Money, MoneyInput, SectionTitle, Sheet, Textarea, stagger,
+  IconButton, Input, Money, MoneyInput, NumberInput, SectionTitle, Sheet, Textarea, stagger,
 } from './ui';
 
 export default function Debts({ toast }) {
@@ -37,7 +37,10 @@ export default function Debts({ toast }) {
         sub={
           debts.empty
             ? 'Mortgages, cards, loans — anything that comes off what you own'
-            : `${formatMoney(debts.owed, cur, { compact: true })} outstanding across ${debts.rows.length} ${debts.rows.length === 1 ? 'debt' : 'debts'}`
+            : `${formatMoney(debts.owed, cur, { compact: true })} outstanding across ${debts.rows.length} ${debts.rows.length === 1 ? 'debt' : 'debts'}` +
+              (debts.monthlyInterest > 0
+                ? ` · about ${formatMoney(debts.monthlyInterest, cur, { compact: true })} a month in interest`
+                : '')
         }
         action={
           <Button size="sm" variant="ghost" onClick={openNew}>
@@ -98,6 +101,41 @@ export default function Debts({ toast }) {
                     </div>
                   </div>
                 )}
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] mt-2">
+                  {d.rate !== null && (
+                    <span className="text-faint">
+                      {formatPercent(d.rate, 1)} a year ·{' '}
+                      <span className="text-bad">
+                        {formatMoney(d.payoff.monthlyInterest, cur)} a month in interest
+                      </span>
+                    </span>
+                  )}
+
+                  {/* The number that explains a debt paid diligently for a year
+                      that has barely moved. */}
+                  {d.interestThisMonth > 0 && (
+                    <span className="text-faint">
+                      of {formatMoney(d.paidThisMonth, cur, { compact: true })} paid,{' '}
+                      {formatMoney(d.interestThisMonth, cur, { compact: true })} was interest
+                    </span>
+                  )}
+
+                  {d.payoff.neverClears ? (
+                    <Badge tone="bad">Payments are below the interest</Badge>
+                  ) : d.payoff.months ? (
+                    <span className="text-faint">
+                      clear in {d.payoff.months} {d.payoff.months === 1 ? 'month' : 'months'} at{' '}
+                      {formatMoney(d.typicalPayment, cur, { compact: true })} a month
+                    </span>
+                  ) : null}
+
+                  {d.paymentMismatch && (
+                    <Badge tone="warn">
+                      ledger says {formatMoney(d.loggedThisMonth, cur, { compact: true })}
+                    </Badge>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -116,7 +154,7 @@ export default function Debts({ toast }) {
 
 /* ─────────────────────────────── Add / edit ─────────────────────────────── */
 
-const blankDebt = () => ({ name: '', class: 'personal', note: '', balance: null, paid: null });
+const blankDebt = () => ({ name: '', class: 'personal', note: '', balance: null, rate: null });
 
 function DebtSheet({ open, editing, onClose, onSaved }) {
   const { dispatch } = useStore();
@@ -129,7 +167,7 @@ function DebtSheet({ open, editing, onClose, onSaved }) {
     if (!open) return;
     setDraft(
       editing
-        ? { name: editing.name, class: editing.class, note: editing.note || '', balance: null, paid: null }
+        ? { name: editing.name, class: editing.class, note: editing.note || '', balance: null, rate: editing.rate ?? null }
         : blankDebt()
     );
     setError('');
@@ -146,7 +184,12 @@ function DebtSheet({ open, editing, onClose, onSaved }) {
       dispatch({
         type: 'updateDebt',
         id: editing.id,
-        patch: { name: draft.name.trim(), class: draft.class, note: draft.note.trim() },
+        patch: {
+          name: draft.name.trim(),
+          class: draft.class,
+          note: draft.note.trim(),
+          rate: draft.rate === null || draft.rate === '' ? null : Number(draft.rate),
+        },
       });
       onSaved?.(`Updated ${draft.name.trim()}`);
     } else {
@@ -216,11 +259,28 @@ function DebtSheet({ open, editing, onClose, onSaved }) {
           </div>
         </div>
 
-        {!editing && (
-          <Field label="Outstanding now" hint="What is still left to pay.">
-            <MoneyInput value={draft.balance} onChange={(v) => patch({ balance: v })} />
+        <div className="grid sm:grid-cols-2 gap-3">
+          {!editing && (
+            <Field label="Outstanding now" hint="What is still left to pay.">
+              <MoneyInput size="md" value={draft.balance} onChange={(v) => patch({ balance: v })} />
+            </Field>
+          )}
+          <Field
+            label="Interest rate"
+            suffix="% a year"
+            hint="Optional. With it, CoinTrack can work out when this clears."
+          >
+            <NumberInput
+              value={draft.rate}
+              onChange={(v) => patch({ rate: v })}
+              min={0}
+              max={200}
+              allowEmpty
+              placeholder="—"
+              className="pr-20"
+            />
           </Field>
-        )}
+        </div>
 
         <Field label="Note" hint="Optional — the rate, when it ends.">
           <Textarea rows={2} value={draft.note} onChange={(e) => patch({ note: e.target.value })} maxLength={120} />

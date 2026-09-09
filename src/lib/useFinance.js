@@ -508,12 +508,51 @@ export function computeInvestments(state, months = 12) {
  * re-reads every statement every month, so a month where only the card was
  * updated must not show the mortgage vanishing.
  */
+/**
+ * How long until a debt is cleared, and what the interest costs on the way.
+ *
+ * Standard amortisation. The guard matters more than the formula: when the
+ * payment does not cover the interest the balance grows forever and the maths
+ * has no answer, which is precisely the situation someone most needs told —
+ * so it returns `neverClears` rather than a number, or worse, a plausible one.
+ */
+export function payoffOf({ balance, rate, monthlyPayment }) {
+  const b = Math.max(0, Number(balance) || 0);
+  const p = Math.max(0, Number(monthlyPayment) || 0);
+  const annual = Number(rate);
+  const r = Number.isFinite(annual) && annual > 0 ? annual / 100 / 12 : 0;
+
+  if (b === 0) return { months: 0, cleared: true, neverClears: false, interest: 0, monthlyInterest: 0 };
+
+  const monthlyInterest = b * r;
+  if (p <= 0) return { months: null, cleared: false, neverClears: false, interest: null, monthlyInterest };
+  if (r > 0 && p <= monthlyInterest) {
+    return { months: null, cleared: false, neverClears: true, interest: null, monthlyInterest };
+  }
+
+  const months = r > 0 ? Math.ceil(-Math.log(1 - (r * b) / p) / Math.log(1 + r)) : Math.ceil(b / p);
+  // The last instalment is usually smaller than the rest, so total paid is
+  // capped at the balance plus whatever interest actually accrues.
+  const totalPaid = r > 0 ? p * months : b;
+  return {
+    months,
+    cleared: false,
+    neverClears: false,
+    interest: Math.max(0, totalPaid - b),
+    monthlyInterest,
+  };
+}
+
 export function computeDebts(state, months = 12) {
   const debts = state.debts || [];
   const nowMonth = monthKey(todayKey());
 
   if (!debts.length) {
-    return { empty: true, debts: [], rows: [], series: [], owed: 0, paidThisMonth: 0, monthChange: { pct: null, kind: 'flat' }, monthDelta: 0, staleDebts: [] };
+    return {
+      empty: true, debts: [], rows: [], series: [], owed: 0, paidThisMonth: 0,
+      monthChange: { pct: null, kind: 'flat' }, monthDelta: 0, staleDebts: [],
+      monthlyInterest: 0, neverClearing: [], mismatched: [], untagged: [],
+    };
   }
 
   const allMonths = debts.flatMap((d) => Object.keys(d.history || {}));
@@ -537,6 +576,16 @@ export function computeDebts(state, months = 12) {
     };
   });
 
+  /** Expenses tagged to a debt, totalled per debt per month. */
+  const loggedByDebt = new Map();
+  for (const e of state.entries || []) {
+    if (e.kind !== 'expense' || !e.debtId) continue;
+    const m = monthKey(e.date);
+    const byMonth = loggedByDebt.get(e.debtId) || new Map();
+    byMonth.set(m, (byMonth.get(m) || 0) + Math.abs(Number(e.amount) || 0));
+    loggedByDebt.set(e.debtId, byMonth);
+  }
+
   const rows = debts
     .map((d) => {
       const snap = latestAtOrBefore(d.history, nowMonth);
@@ -544,15 +593,67 @@ export function computeDebts(state, months = 12) {
       const balance = snap ? Number(snap.balance) || 0 : 0;
       const history = Object.entries(d.history || {}).sort(([a], [b]) => (a < b ? -1 : 1));
       const opening = history.length ? Number(history[0][1].balance) || 0 : 0;
+
+      const logged = loggedByDebt.get(d.id) || new Map();
+      const loggedThisMonth = logged.get(nowMonth) || 0;
+      const loggedTotal = [...logged.values()].reduce((n, v) => n + v, 0);
+      const snapshotPaidThisMonth = Number(d.history?.[nowMonth]?.paid) || 0;
+
+      /*
+       * What the last full month actually cost.
+       *
+       * Payments made, less the amount the balance came down by. The remainder
+       * is interest — the number that explains why a debt paid diligently for a
+       * year has barely moved, and the reason payments are tagged rather than
+       * simply subtracted.
+       */
+      const prevMonth = addMonthKeys(nowMonth, -1);
+      const prevSnap = latestAtOrBefore(d.history, prevMonth);
+      const thisSnap = d.history?.[nowMonth];
+      const paidLastPeriod = Math.max(loggedThisMonth, snapshotPaidThisMonth);
+      const interestThisMonth =
+        prevSnap && thisSnap && paidLastPeriod > 0
+          ? Math.max(0, paidLastPeriod - ((Number(prevSnap.balance) || 0) - (Number(thisSnap.balance) || 0)))
+          : null;
+
+      /** A typical recent payment, used to project when this clears. */
+      const recentPayments = [...logged.entries()]
+        .filter(([m]) => m <= nowMonth)
+        .sort(([a], [b]) => (a < b ? 1 : -1))
+        .slice(0, 3)
+        .map(([, v]) => v);
+      const snapshotPayments = history.slice(-3).map(([, h]) => Number(h.paid) || 0).filter(Boolean);
+      const sample = recentPayments.length ? recentPayments : snapshotPayments;
+      const typicalPayment = sample.length ? sample.reduce((n, v) => n + v, 0) / sample.length : 0;
+
+      const rate = d.rate === null || d.rate === undefined ? null : Number(d.rate);
+      const payoff = payoffOf({ balance, rate, monthlyPayment: typicalPayment });
+
       return {
         ...d,
         meta,
+        rate,
         balance,
         opening,
         /** How much of it has been cleared since it was first recorded. */
         clearedSoFar: Math.max(0, opening - balance),
         paidTotal: sum(Object.values(d.history || {}), (h) => h.paid),
-        paidThisMonth: Number(d.history?.[nowMonth]?.paid) || 0,
+        paidThisMonth: Math.max(snapshotPaidThisMonth, loggedThisMonth),
+        loggedThisMonth,
+        loggedTotal,
+        snapshotPaidThisMonth,
+        /**
+         * The ledger and the statement disagree about what was paid this month.
+         * Not an error — one of them is probably just not filled in yet — but
+         * the only way to notice is to be told.
+         */
+        paymentMismatch:
+          loggedThisMonth > 0 &&
+          snapshotPaidThisMonth > 0 &&
+          Math.abs(loggedThisMonth - snapshotPaidThisMonth) > Math.max(1, loggedThisMonth * 0.05),
+        interestThisMonth,
+        typicalPayment,
+        payoff,
         lastMonth: snap?.month || null,
         monthsStale: snap?.month ? monthsApart(snap.month, nowMonth) : null,
       };
@@ -573,6 +674,11 @@ export function computeDebts(state, months = 12) {
     monthChange: prev ? pctChange(last.owed, prev.owed) : { pct: null, kind: 'new' },
     monthDelta: prev ? last.owed - prev.owed : 0,
     staleDebts: rows.filter((r) => r.monthsStale === null || r.monthsStale >= 2),
+    /** Estimated interest accruing across every debt, per month. */
+    monthlyInterest: sum(rows, (r) => r.payoff.monthlyInterest || 0),
+    neverClearing: rows.filter((r) => r.payoff.neverClears),
+    mismatched: rows.filter((r) => r.paymentMismatch),
+    untagged: rows.filter((r) => r.snapshotPaidThisMonth > 0 && r.loggedThisMonth === 0),
     currentMonth: nowMonth,
   };
 }

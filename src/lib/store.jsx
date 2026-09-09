@@ -191,6 +191,16 @@ function reducer(state, action) {
          * shows the goal selected, and the entry is saved without it.
          */
         ...(e.kind === 'saving' && e.goalId ? { goalId: e.goalId } : {}),
+        /*
+         * Which debt an expense was paying off.
+         *
+         * Tagged rather than automatic, because a payment is not the same as a
+         * reduction in balance: the difference between the two is interest, and
+         * that difference is the most useful thing this app can show about a
+         * debt. Auto-deducting the payment would erase exactly the number worth
+         * seeing.
+         */
+        ...(e.kind === 'expense' && e.debtId ? { debtId: e.debtId } : {}),
         ...(e.fx && Number(e.fx.amount) > 0 && Number(e.fx.rate) > 0
           ? { fx: { currency: e.fx.currency, amount: Number(e.fx.amount), rate: Number(e.fx.rate) } }
           : {}),
@@ -412,6 +422,8 @@ function reducer(state, action) {
         name: (d.name || '').trim() || 'Untitled debt',
         class: d.class || 'personal',
         note: (d.note || '').trim(),
+        /** Annual interest rate as a percentage. Optional — null means unknown. */
+        rate: d.rate === null || d.rate === undefined || d.rate === '' ? null : Number(d.rate),
         createdAt: Date.now(),
         history: {},
       };
@@ -432,8 +444,21 @@ function reducer(state, action) {
         debts: state.debts.map((d) => (d.id === action.id ? { ...d, ...action.patch } : d)),
       };
 
+    /**
+     * Deleting a debt leaves its payments alone.
+     *
+     * Those were real expenses that really happened; removing them because the
+     * debt was cleared would silently change every past month's spending. They
+     * simply become untagged.
+     */
     case 'deleteDebt':
-      return { ...state, debts: state.debts.filter((d) => d.id !== action.id) };
+      return {
+        ...state,
+        debts: state.debts.filter((d) => d.id !== action.id),
+        entries: state.entries.map((e) =>
+          e.debtId === action.id ? { ...e, debtId: undefined } : e
+        ),
+      };
 
     case 'setDebtSnapshot':
       return {

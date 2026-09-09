@@ -22,7 +22,7 @@
  *      dismissed next month instead of resurfacing with a new random key.
  */
 
-import { financeFor, investmentsFor, memoByState } from './useFinance';
+import { debtsFor, financeFor, investmentsFor, memoByState } from './useFinance';
 import { goalsWithProgress } from './goals';
 import { categoryById } from './data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, todayKey } from './calc';
@@ -34,6 +34,7 @@ export const SECTIONS = [
   { id: 'income',    label: 'Income',        icon: 'trendUp',   blurb: 'What is coming in, and how steadily' },
   { id: 'saving',    label: 'Savings',       icon: 'piggy',     blurb: 'What you keep, and your cushion' },
   { id: 'investing', label: 'Investments',   icon: 'chart',     blurb: 'What your holdings look like' },
+  { id: 'debt',      label: 'What you owe',  icon: 'bank',      blurb: 'Balances, interest and how long they take' },
 ];
 
 const RANK = { bad: 0, warn: 1, info: 2, good: 3 };
@@ -674,6 +675,114 @@ function buildSection(state, section) {
     return out.sort(sortRules);
   }
 
+  /* ──────────────────────────────── Debt ──────────────────────────────── */
+
+  if (section === 'debt') {
+    const debts = debtsFor(state, 12);
+
+    if (debts.empty) {
+      add({
+        id: 'debt-empty',
+        tone: 'info',
+        icon: 'bank',
+        title: 'Nothing recorded as owed',
+        body: 'If you have a mortgage, a card balance or a loan, adding it is what turns what you own into what you are actually worth. Net worth without it counts one side of the ledger.',
+        action: { label: 'Add a debt', to: 'investments' },
+        priority: 3,
+      });
+      return out.sort(sortRules);
+    }
+
+    add({
+      id: 'debt-summary',
+      tone: 'info',
+      icon: 'bank',
+      title: `${money(debts.owed)} outstanding`,
+      body:
+        debts.monthlyInterest > 0
+          ? `Across ${debts.rows.length} ${debts.rows.length === 1 ? 'debt' : 'debts'}, costing roughly ${money(debts.monthlyInterest)} a month in interest — ${money(debts.monthlyInterest * 12)} a year before a penny comes off what you borrowed.`
+          : `Across ${debts.rows.length} ${debts.rows.length === 1 ? 'debt' : 'debts'}. Add an interest rate to each and this can work out what they cost and when they clear.`,
+      priority: 4,
+    });
+
+    for (const d of debts.neverClearing) {
+      add({
+        id: `debt-never-${d.id}`,
+        tone: 'bad',
+        icon: 'alert',
+        title: `${d.name} is growing, not shrinking`,
+        body: `At ${formatPercent(d.rate, 1)} the interest alone is about ${money(d.payoff.monthlyInterest)} a month, and recent payments have averaged ${money(d.typicalPayment)}. On those numbers the balance never comes down.`,
+        action: { label: 'Open what you owe', to: 'investments' },
+        priority: 0,
+      });
+    }
+
+    const dearest = debts.rows
+      .filter((d) => d.rate > 0 && d.balance > 0 && !d.payoff.neverClears)
+      .sort((a, b) => b.rate - a.rate)[0];
+    if (dearest && debts.rows.filter((d) => d.rate > 0).length > 1) {
+      add({
+        id: `debt-dearest-${dearest.id}`,
+        tone: 'info',
+        icon: 'percent',
+        title: `${dearest.name} is your most expensive at ${formatPercent(dearest.rate, 1)}`,
+        body: `It costs about ${money(dearest.payoff.monthlyInterest)} a month while it sits there. That is an observation about the rates you have recorded, not a recommendation about which to pay first — that depends on things this app does not know.`,
+        priority: 3,
+      });
+    }
+
+    for (const d of debts.mismatched) {
+      add({
+        id: `debt-mismatch-${d.id}`,
+        tone: 'warn',
+        icon: 'scale',
+        title: `Ledger and statement disagree on ${d.name}`,
+        body: `${money(d.loggedThisMonth)} logged as paid toward it this month, but the monthly update records ${money(d.snapshotPaidThisMonth)}. One of the two is probably missing an entry.`,
+        action: { label: 'Open what you owe', to: 'investments' },
+        priority: 2,
+      });
+    }
+
+    if (debts.untagged.length) {
+      add({
+        id: 'debt-untagged',
+        tone: 'info',
+        icon: 'ledger',
+        title: `${debts.untagged.length} ${debts.untagged.length === 1 ? 'payment is' : 'payments are'} not in the ledger`,
+        body: `${debts.untagged.map((d) => d.name).join(', ')} recorded a payment in the monthly update with no matching expense logged. Tagging the expense to the debt is what lets this work out how much of it was interest.`,
+        priority: 3,
+      });
+    }
+
+    const withInterest = debts.rows.filter((d) => d.interestThisMonth > 0);
+    if (withInterest.length) {
+      const paid = withInterest.reduce((n, d) => n + d.paidThisMonth, 0);
+      const interest = withInterest.reduce((n, d) => n + d.interestThisMonth, 0);
+      add({
+        id: 'debt-interest-share',
+        tone: interest > paid * 0.5 ? 'warn' : 'info',
+        icon: 'drop',
+        title: `${formatPercent((interest / paid) * 100)} of what you paid went on interest`,
+        body: `${money(paid)} paid this month, of which ${money(interest)} never touched what you borrowed. That is the difference between a debt shrinking and a debt being maintained.`,
+        priority: interest > paid * 0.5 ? 1 : 4,
+      });
+    }
+
+    const noRate = debts.rows.filter((d) => d.rate === null || d.rate === undefined);
+    if (noRate.length) {
+      add({
+        id: 'debt-no-rate',
+        tone: 'info',
+        icon: 'percent',
+        title: `${noRate.length} ${noRate.length === 1 ? 'debt has' : 'debts have'} no rate recorded`,
+        body: `${noRate.map((d) => d.name).join(', ')}. Without it there is no way to say what they cost or when they clear — the rate is on the statement.`,
+        priority: 5,
+      });
+    }
+
+    return out.sort(sortRules);
+  }
+
   /* ───────────────────────────── Investments ──────────────────────────── */
 
   if (section === 'investing') {
@@ -798,7 +907,7 @@ export function liveSuggestions(state, section) {
 /** The few most urgent items across the whole app, for the dashboard. */
 export function headlineSuggestions(state, limit = 3) {
   const dismissed = new Set(state.dismissed);
-  const pool = ['overall', 'budgets', 'saving', 'investing'].flatMap((s) => buildSuggestions(state, s));
+  const pool = ['overall', 'budgets', 'saving', 'debt', 'investing'].flatMap((s) => buildSuggestions(state, s));
   const seen = new Set();
   return pool
     .filter((s) => {

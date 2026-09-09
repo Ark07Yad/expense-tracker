@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   balanceAt, budgetForPeriod, budgetLines, byCategory, computeDebts,
   computeFinance, computeInvestments, entriesInRange, monthlyBreakdown, movers,
-  netWorthOf, seriesOf, totalsOf,
+  netWorthOf, payoffOf, seriesOf, totalsOf,
 } from './useFinance';
 import { addMonthKeys, monthKey, todayKey } from './calc';
 
@@ -293,6 +293,114 @@ describe('computeDebts', () => {
     expect(row.opening).toBe(5000);
     expect(row.balance).toBe(4200);
     expect(row.clearedSoFar).toBe(800);
+  });
+});
+
+describe('payoffOf', () => {
+  it('works out how long a debt takes to clear', () => {
+    // 1,000 at 12% a year, paying 100 a month: about eleven months.
+    const p = payoffOf({ balance: 1000, rate: 12, monthlyPayment: 100 });
+    expect(p.months).toBe(11);
+    expect(p.interest).toBeGreaterThan(0);
+    expect(p.neverClears).toBe(false);
+  });
+
+  it('handles an interest-free debt as simple division', () => {
+    const p = payoffOf({ balance: 1000, rate: 0, monthlyPayment: 250 });
+    expect(p.months).toBe(4);
+    expect(p.interest).toBe(0);
+  });
+
+  it('says a payment that does not cover the interest never clears', () => {
+    // The one case where the arithmetic has no answer, and precisely the case
+    // someone most needs to be told about — a plausible-looking number here
+    // would be worse than none.
+    const p = payoffOf({ balance: 5000, rate: 24, monthlyPayment: 80 });
+    expect(p.neverClears).toBe(true);
+    expect(p.months).toBeNull();
+    expect(p.monthlyInterest).toBe(100);
+  });
+
+  it('reports a cleared debt as cleared', () => {
+    expect(payoffOf({ balance: 0, rate: 20, monthlyPayment: 0 })).toMatchObject({
+      months: 0,
+      cleared: true,
+    });
+  });
+
+  it('declines to guess when nothing is being paid', () => {
+    const p = payoffOf({ balance: 1000, rate: 10, monthlyPayment: 0 });
+    expect(p.months).toBeNull();
+    expect(p.neverClears).toBe(false);
+  });
+
+  it('treats a missing rate as interest-free rather than throwing', () => {
+    expect(payoffOf({ balance: 600, rate: null, monthlyPayment: 200 }).months).toBe(3);
+  });
+});
+
+describe('debt payments linked to the ledger', () => {
+  const nowM = monthKey(todayKey());
+  const mk = (n) => addMonthKeys(nowM, n);
+
+  const withPayment = (over = {}) =>
+    baseState({
+      entries: [
+        { id: 'p1', date: todayKey(), kind: 'expense', category: 'debt', title: 'Card payment',
+          note: '', amount: 400, createdAt: 1, debtId: 'card' },
+        ...(over.entries || []),
+      ],
+      debts: [{
+        id: 'card', name: 'Visa', class: 'card', note: '', rate: 24, createdAt: 1,
+        history: { [mk(-1)]: { paid: 0, balance: 1200 }, [nowM]: { paid: 400, balance: 950 } },
+        ...over.debt,
+      }],
+    });
+
+  it('counts tagged expenses as payments toward that debt', () => {
+    const row = computeDebts(withPayment(), 12).rows[0];
+    expect(row.loggedThisMonth).toBe(400);
+    expect(row.loggedTotal).toBe(400);
+  });
+
+  it('works out the interest from what was paid against what came off', () => {
+    // Paid 400, balance fell 1200 → 950, so 150 of it was interest. This is
+    // the number that explains a debt paid diligently that barely moves.
+    const row = computeDebts(withPayment(), 12).rows[0];
+    expect(row.interestThisMonth).toBe(150);
+  });
+
+  it('flags when the ledger and the statement disagree', () => {
+    const state = withPayment({ debt: { history: { [mk(-1)]: { paid: 0, balance: 1200 }, [nowM]: { paid: 900, balance: 950 } } } });
+    expect(computeDebts(state, 12).mismatched.map((r) => r.id)).toEqual(['card']);
+  });
+
+  it('does not flag a small rounding difference', () => {
+    const state = withPayment({ debt: { history: { [mk(-1)]: { paid: 0, balance: 1200 }, [nowM]: { paid: 401, balance: 950 } } } });
+    expect(computeDebts(state, 12).mismatched).toHaveLength(0);
+  });
+
+  it('notices a statement payment with nothing logged against it', () => {
+    const state = baseState({
+      debts: [{
+        id: 'loan', name: 'Loan', class: 'personal', note: '', rate: null, createdAt: 1,
+        history: { [nowM]: { paid: 300, balance: 2000 } },
+      }],
+    });
+    expect(computeDebts(state, 12).untagged.map((r) => r.id)).toEqual(['loan']);
+  });
+
+  it('projects a payoff from recent payments', () => {
+    const row = computeDebts(withPayment(), 12).rows[0];
+    expect(row.typicalPayment).toBe(400);
+    expect(row.payoff.months).toBeGreaterThan(0);
+    expect(row.payoff.neverClears).toBe(false);
+  });
+
+  it('totals the interest accruing across every debt', () => {
+    const d = computeDebts(withPayment(), 12);
+    // 950 at 24% a year is 19 a month.
+    expect(d.monthlyInterest).toBeCloseTo(19, 5);
   });
 });
 

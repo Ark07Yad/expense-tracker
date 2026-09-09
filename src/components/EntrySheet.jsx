@@ -16,6 +16,7 @@ import { useStore } from '../lib/store';
 import { CURRENCIES, KINDS, QUICK_ADD, categoriesFor, categoryById, kindById } from '../lib/data';
 import { FREQUENCIES } from '../lib/recurring';
 import { goalsWithProgress } from '../lib/goals';
+import { debtsFor } from '../lib/useFinance';
 import { ACCEPTED, attachFile, formatBytes, removeAttachment } from '../lib/attachments';
 import { dayLabel, formatMoney, todayKey } from '../lib/calc';
 import {
@@ -31,6 +32,7 @@ const blank = (date) => ({
   amount: null,
   date: date || todayKey(),
   goalId: undefined,
+  debtId: undefined,
   /**
    * Set only when the money was actually spent in another currency:
    * { currency, amount, rate }.
@@ -72,6 +74,7 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
   const kind = kindById(draft.kind);
   const cats = categoriesFor(draft.kind);
   const goals = useMemo(() => goalsWithProgress(state, todayKey()).filter((g) => !g.complete), [state]);
+  const debts = useMemo(() => debtsFor(state, 12).rows.filter((d) => d.balance > 0), [state]);
   const patch = (p) => setDraft((d) => ({ ...d, ...p }));
 
   const attachments = draft.attachments || [];
@@ -141,6 +144,8 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
       // Only a saving can belong to a goal. Leaving the tag on after a switch
       // would credit a goal with an expense.
       goalId: id === 'saving' ? draft.goalId : undefined,
+      // Only an expense can pay off a debt.
+      debtId: id === 'expense' ? draft.debtId : undefined,
     });
   };
 
@@ -355,6 +360,50 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
             })}
           </div>
         </div>
+
+        {/*
+          * A loan payment can say which debt it is paying.
+          *
+          * Tagged, not deducted: the difference between what you pay and what
+          * comes off the balance is interest, and that is the number worth
+          * seeing. Shown only for the loan category, so it does not clutter
+          * every expense.
+          */}
+        {draft.kind === 'expense' && draft.category === 'debt' && debts.length > 0 && (
+          <div>
+            <span className="block text-[12px] font-medium text-dim mb-1.5" id="entry-debt-label">
+              Paying off
+            </span>
+            <div className="flex gap-1.5 flex-wrap" role="group" aria-labelledby="entry-debt-label">
+              <button
+                onClick={() => patch({ debtId: undefined })}
+                className={`px-2.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all active:scale-95 border
+                            ${!draft.debtId ? 'bg-brand-500/18 border-brand-400/50 text-brandy' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+              >
+                Not a debt payment
+              </button>
+              {debts.map((d) => {
+                const active = draft.debtId === d.id;
+                return (
+                  <button
+                    key={d.id}
+                    onClick={() => patch({ debtId: d.id })}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12.5px] font-medium
+                                transition-all active:scale-95 border
+                                ${active ? '' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+                    style={active ? { background: `${d.meta.color}26`, borderColor: `${d.meta.color}88`, color: d.meta.color } : undefined}
+                  >
+                    <Icon name={d.meta.icon} className="size-3.5" />
+                    {d.name}
+                    <span className="text-faint">
+                      {formatMoney(d.balance, state.profile.currency, { compact: true })} left
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Only savings can be tagged, and only when there is something to tag
             to — an empty picker would just be a question with no answers. */}
