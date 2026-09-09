@@ -138,11 +138,12 @@ export default function Dashboard({ onNavigate }) {
           {/* The parts, so the total is never a black box. Money sent to
               investments is counted once — as what the holdings are worth,
               not also as the cash that bought them. */}
-          <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className={`grid gap-2 mt-3 ${worth.hasDebts ? 'grid-cols-2' : 'grid-cols-3'}`}>
             {[
               ['Free to spend', worth.spendable, ''],
               ['In savings', worth.pot, 'text-save'],
               ['Invested', worth.investments, 'text-invest'],
+              ...(worth.hasDebts ? [['Owed', -worth.owed, 'text-bad']] : []),
             ].map(([label, value, tone]) => (
               <div key={label}>
                 <div className="text-[10px] uppercase tracking-wider text-faint leading-tight">{label}</div>

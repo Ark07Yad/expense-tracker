@@ -14,9 +14,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  balanceAt, budgetForPeriod, budgetLines, byCategory, computeFinance,
-  computeInvestments, entriesInRange, monthlyBreakdown, movers, netWorthOf,
-  seriesOf, totalsOf,
+  balanceAt, budgetForPeriod, budgetLines, byCategory, computeDebts,
+  computeFinance, computeInvestments, entriesInRange, monthlyBreakdown, movers,
+  netWorthOf, seriesOf, totalsOf,
 } from './useFinance';
 import { addMonthKeys, monthKey, todayKey } from './calc';
 
@@ -33,6 +33,9 @@ const baseState = (over = {}) => ({
   },
   entries: over.entries || [],
   assets: over.assets || [],
+  debts: over.debts || [],
+  recurring: over.recurring || [],
+  goals: over.goals || [],
   notes: [], dismissed: [],
 });
 
@@ -236,6 +239,100 @@ describe('netWorthOf', () => {
 
   it('is empty-safe', () => {
     expect(netWorthOf(baseState())).toMatchObject({ netWorth: 0, cash: 0, investments: 0 });
+  });
+});
+
+describe('computeDebts', () => {
+  const nowM = monthKey(todayKey());
+  const mk = (n) => addMonthKeys(nowM, n);
+  const debt = (id, cls, history) => ({ id, name: id, class: cls, note: '', createdAt: 1, history });
+
+  it('reports nothing owed when nothing is recorded', () => {
+    const d = computeDebts(baseState(), 12);
+    expect(d.empty).toBe(true);
+    expect(d.owed).toBe(0);
+  });
+
+  it('totals what is outstanding', () => {
+    const state = baseState({
+      debts: [
+        debt('card', 'card', { [mk(0)]: { paid: 200, balance: 800 } }),
+        debt('loan', 'personal', { [mk(0)]: { paid: 300, balance: 4000 } }),
+      ],
+    });
+    const d = computeDebts(state, 12);
+    expect(d.owed).toBe(4800);
+    expect(d.paidThisMonth).toBe(500);
+    // Largest first, so the one that matters is at the top.
+    expect(d.rows.map((r) => r.id)).toEqual(['loan', 'card']);
+  });
+
+  it('carries an un-updated balance forward instead of clearing it', () => {
+    // Nobody re-reads every statement every month. Without carry-forward a
+    // month where only the card was updated would show the mortgage vanishing
+    // — and net worth leaping by the size of a house.
+    const state = baseState({
+      debts: [
+        debt('mortgage', 'mortgage', { [mk(-3)]: { paid: 0, balance: 200000 } }),
+        debt('card', 'card', { [mk(0)]: { paid: 100, balance: 500 } }),
+      ],
+    });
+    const d = computeDebts(state, 12);
+    expect(d.owed).toBe(200500);
+    expect(d.staleDebts.map((r) => r.id)).toEqual(['mortgage']);
+  });
+
+  it('tracks how much has been cleared since it was first recorded', () => {
+    const state = baseState({
+      debts: [debt('loan', 'personal', {
+        [mk(-2)]: { paid: 0, balance: 5000 },
+        [mk(0)]: { paid: 400, balance: 4200 },
+      })],
+    });
+    const row = computeDebts(state, 12).rows[0];
+    expect(row.opening).toBe(5000);
+    expect(row.balance).toBe(4200);
+    expect(row.clearedSoFar).toBe(800);
+  });
+});
+
+describe('netWorthOf with debt', () => {
+  const nowM = monthKey(todayKey());
+
+  it('takes what is owed off what is owned', () => {
+    // Net worth that counts everything you own and nothing you owe is not a
+    // net anything.
+    const state = baseState({
+      profile: { openingBalance: 10000 },
+      debts: [{
+        id: 'm', name: 'Mortgage', class: 'mortgage', note: '', createdAt: 1,
+        history: { [nowM]: { paid: 0, balance: 4000 } },
+      }],
+    });
+    const w = netWorthOf(state);
+    expect(w.assets).toBe(10000);
+    expect(w.owed).toBe(4000);
+    expect(w.netWorth).toBe(6000);
+    expect(w.hasDebts).toBe(true);
+  });
+
+  it('can be negative when the debts are bigger', () => {
+    const state = baseState({
+      profile: { openingBalance: 1000 },
+      debts: [{
+        id: 'm', name: 'Mortgage', class: 'mortgage', note: '', createdAt: 1,
+        history: { [nowM]: { paid: 0, balance: 9000 } },
+      }],
+    });
+    expect(netWorthOf(state).netWorth).toBe(-8000);
+  });
+
+  it('leaves net worth untouched when there are no debts', () => {
+    const state = baseState({ profile: { openingBalance: 1000 } });
+    const w = netWorthOf(state);
+    expect(w.owed).toBe(0);
+    expect(w.hasDebts).toBe(false);
+    expect(w.netWorth).toBe(1000);
   });
 });
 

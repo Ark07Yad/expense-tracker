@@ -88,6 +88,22 @@ const initialState = {
    */
   goals: [],
 
+  /**
+   * What you owe: mortgages, cards, loans.
+   *
+   * Same shape as a holding, and updated in the same monthly ritual, because it
+   * is the same action — you read a number off a statement and write it down.
+   * Without these, net worth counts everything you own and nothing you owe,
+   * which for anyone with a mortgage is not a net anything.
+   *
+   *   { id, name, class, note, createdAt,
+   *     history: { 'YYYY-MM': { paid, balance } } }
+   *
+   * `paid` is what you put toward it that month; `balance` is what was left
+   * after. Keeping both separates paying a debt down from its interest growing.
+   */
+  debts: [],
+
   /** Free-text notes the user pins in the advisor. */
   notes: [],
 
@@ -116,6 +132,9 @@ function hydrate(stored) {
       : [],
     recurring: Array.isArray(stored.recurring) ? stored.recurring : [],
     goals: Array.isArray(stored.goals) ? stored.goals : [],
+    debts: Array.isArray(stored.debts)
+      ? stored.debts.map((d) => ({ ...d, history: d.history || {} }))
+      : [],
     notes: Array.isArray(stored.notes) ? stored.notes : [],
     dismissed: Array.isArray(stored.dismissed) ? stored.dismissed : [],
   };
@@ -383,6 +402,57 @@ function reducer(state, action) {
         ),
       };
     }
+
+    /* ── Debts ── */
+
+    case 'addDebt': {
+      const d = action.debt;
+      const debt = {
+        id: uid(),
+        name: (d.name || '').trim() || 'Untitled debt',
+        class: d.class || 'personal',
+        note: (d.note || '').trim(),
+        createdAt: Date.now(),
+        history: {},
+      };
+      // An opening balance is the whole point of adding one, so seed it rather
+      // than making the user add the debt and immediately update it.
+      if (d.balance) {
+        debt.history[d.month || monthKey(todayKey())] = {
+          paid: Math.max(0, Number(d.paid) || 0),
+          balance: Math.max(0, Number(d.balance) || 0),
+        };
+      }
+      return { ...state, debts: [...state.debts, debt] };
+    }
+
+    case 'updateDebt':
+      return {
+        ...state,
+        debts: state.debts.map((d) => (d.id === action.id ? { ...d, ...action.patch } : d)),
+      };
+
+    case 'deleteDebt':
+      return { ...state, debts: state.debts.filter((d) => d.id !== action.id) };
+
+    case 'setDebtSnapshot':
+      return {
+        ...state,
+        debts: state.debts.map((d) =>
+          d.id === action.debtId
+            ? {
+                ...d,
+                history: {
+                  ...d.history,
+                  [action.month]: {
+                    paid: Math.max(0, Number(action.paid) || 0),
+                    balance: Math.max(0, Number(action.balance) || 0),
+                  },
+                },
+              }
+            : d
+        ),
+      };
 
     /* ── Goals ── */
 

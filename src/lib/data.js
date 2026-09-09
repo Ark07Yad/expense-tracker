@@ -153,6 +153,26 @@ export const ASSET_CLASSES = [
   { id: 'cash',     label: 'Cash & liquid', icon: 'wallet',  color: '#94a3b8', risk: 0 },
 ];
 
+/**
+ * What you owe.
+ *
+ * `revolving` marks the debts that regenerate if you keep using them — a credit
+ * card paid down and spent again is a different problem from a mortgage, and the
+ * advice for the two is not the same.
+ */
+export const DEBT_CLASSES = [
+  { id: 'mortgage', label: 'Mortgage', icon: 'home', color: '#f472b6', revolving: false },
+  { id: 'card', label: 'Credit card', icon: 'wallet', color: '#fb7185', revolving: true },
+  { id: 'personal', label: 'Personal loan', icon: 'bank', color: '#fb923c', revolving: false },
+  { id: 'car', label: 'Car loan', icon: 'car', color: '#38bdf8', revolving: false },
+  { id: 'student', label: 'Student loan', icon: 'book', color: '#a78bfa', revolving: false },
+  { id: 'overdraft', label: 'Overdraft', icon: 'drop', color: '#facc15', revolving: true },
+  { id: 'other-debt', label: 'Other', icon: 'dots', color: '#94a3b8', revolving: false },
+];
+
+export const debtClassById = (id) =>
+  DEBT_CLASSES.find((d) => d.id === id) || DEBT_CLASSES[DEBT_CLASSES.length - 1];
+
 export const assetClassById = (id) =>
   ASSET_CLASSES.find((a) => a.id === id) || ASSET_CLASSES[ASSET_CLASSES.length - 1];
 

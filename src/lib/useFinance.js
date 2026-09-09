@@ -14,7 +14,7 @@
 
 import { useMemo } from 'react';
 import { useStore } from './store';
-import { assetClassById, categoriesFor, categoryById } from './data';
+import { assetClassById, categoriesFor, categoryById, debtClassById } from './data';
 import {
   addDays,
   addMonthKeys,
@@ -501,6 +501,82 @@ export function computeInvestments(state, months = 12) {
   };
 }
 
+/**
+ * What you owe, carried forward.
+ *
+ * Deliberately the same shape and the same carry-forward as holdings: nobody
+ * re-reads every statement every month, so a month where only the card was
+ * updated must not show the mortgage vanishing.
+ */
+export function computeDebts(state, months = 12) {
+  const debts = state.debts || [];
+  const nowMonth = monthKey(todayKey());
+
+  if (!debts.length) {
+    return { empty: true, debts: [], rows: [], series: [], owed: 0, paidThisMonth: 0, monthChange: { pct: null, kind: 'flat' }, monthDelta: 0, staleDebts: [] };
+  }
+
+  const allMonths = debts.flatMap((d) => Object.keys(d.history || {}));
+  const firstMonth = allMonths.length ? allMonths.sort()[0] : nowMonth;
+
+  const span = [];
+  for (let m = firstMonth; m <= nowMonth; m = addMonthKeys(m, 1)) span.push(m);
+  const window = span.slice(-months);
+
+  const series = window.map((m) => {
+    let owed = 0;
+    for (const d of debts) {
+      const snap = latestAtOrBefore(d.history, m);
+      if (snap) owed += Number(snap.balance) || 0;
+    }
+    return {
+      key: m,
+      short: new Date(`${m}-01T12:00:00`).toLocaleDateString(undefined, { month: 'short' }),
+      label: new Date(`${m}-01T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+      owed: Math.round(owed),
+    };
+  });
+
+  const rows = debts
+    .map((d) => {
+      const snap = latestAtOrBefore(d.history, nowMonth);
+      const meta = debtClassById(d.class);
+      const balance = snap ? Number(snap.balance) || 0 : 0;
+      const history = Object.entries(d.history || {}).sort(([a], [b]) => (a < b ? -1 : 1));
+      const opening = history.length ? Number(history[0][1].balance) || 0 : 0;
+      return {
+        ...d,
+        meta,
+        balance,
+        opening,
+        /** How much of it has been cleared since it was first recorded. */
+        clearedSoFar: Math.max(0, opening - balance),
+        paidTotal: sum(Object.values(d.history || {}), (h) => h.paid),
+        paidThisMonth: Number(d.history?.[nowMonth]?.paid) || 0,
+        lastMonth: snap?.month || null,
+        monthsStale: snap?.month ? monthsApart(snap.month, nowMonth) : null,
+      };
+    })
+    .sort((a, b) => b.balance - a.balance);
+
+  const owed = sum(rows, (r) => r.balance);
+  const last = series[series.length - 1];
+  const prev = series[series.length - 2];
+
+  return {
+    empty: false,
+    debts,
+    rows,
+    series,
+    owed,
+    paidThisMonth: sum(rows, (r) => r.paidThisMonth),
+    monthChange: prev ? pctChange(last.owed, prev.owed) : { pct: null, kind: 'new' },
+    monthDelta: prev ? last.owed - prev.owed : 0,
+    staleDebts: rows.filter((r) => r.monthsStale === null || r.monthsStale >= 2),
+    currentMonth: nowMonth,
+  };
+}
+
 function monthsApart(a, b) {
   const [ay, am] = a.split('-').map(Number);
   const [by, bm] = b.split('-').map(Number);
@@ -543,6 +619,10 @@ export const financeFor = (state, period, offset) =>
 export const investmentsFor = (state, months = 12) =>
   memoByState(state, `i:${months}`, () => computeInvestments(state, months));
 
+/** Memoised `computeDebts`. */
+export const debtsFor = (state, months = 12) =>
+  memoByState(state, `d:${months}`, () => computeDebts(state, months));
+
 /* ─────────────────────────────────  Hooks  ───────────────────────────────── */
 
 export function useFinance(period, offset = 0, categoryFilter = null) {
@@ -556,6 +636,11 @@ export function useFinance(period, offset = 0, categoryFilter = null) {
 export function useInvestments(months = 12) {
   const { state } = useStore();
   return useMemo(() => computeInvestments(state, months), [state, months]);
+}
+
+export function useDebts(months = 12) {
+  const { state } = useStore();
+  return useMemo(() => computeDebts(state, months), [state, months]);
 }
 
 /** Rolling daily totals, for the sparkline and the year heatmap. */
@@ -628,8 +713,29 @@ export function netWorthOf(state, asOf = todayKey()) {
   // The savings pot, likewise, without the part that has become holdings.
   const pot = led.pot - led.toInvestments;
 
+  /*
+   * Debts, valued at the same month as the holdings.
+   *
+   * Net worth that counts everything you own and nothing you owe is not a net
+   * anything — for anyone with a mortgage it was overstated by the size of
+   * their house.
+   */
+  const debtInfo = debtsFor(state, 120);
+  const owed = debtInfo.empty
+    ? 0
+    : (() => {
+        const wanted = monthKey(asOf);
+        let latest = 0;
+        for (const row of debtInfo.series) if (row.key <= wanted) latest = row.owed;
+        return latest;
+      })();
+
   return {
-    netWorth: cash + investments,
+    netWorth: cash + investments - owed,
+    /** What you own, before anything owed is taken off. */
+    assets: cash + investments,
+    owed,
+    hasDebts: !debtInfo.empty,
     cash,
     /** Earmarked savings still held as money, not as investments. */
     pot,

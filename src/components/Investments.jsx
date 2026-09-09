@@ -18,10 +18,11 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { useStore } from '../lib/store';
-import { useInvestments } from '../lib/useFinance';
+import { netWorthOf, useDebts, useInvestments } from '../lib/useFinance';
 import { ASSET_CLASSES, assetClassById } from '../lib/data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, monthLabel, todayKey } from '../lib/calc';
 import Goals from './Goals';
+import Debts, { DebtUpdateRows } from './Debts';
 import {
   Badge, Bar, Button, Card, CategoryDot, ConfirmButton, Empty, Field, Icon,
   IconButton, Input, Money, MoneyInput, SectionTitle, Select, Sheet, Stat,
@@ -31,6 +32,8 @@ import {
 export default function Investments({ toast }) {
   const { state } = useStore();
   const inv = useInvestments(12);
+  const debts = useDebts(12);
+  const worth = useMemo(() => netWorthOf(state), [state]);
   const cur = state.profile.currency;
   const [addOpen, setAddOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -44,7 +47,7 @@ export default function Investments({ toast }) {
       <Card glow sheen className="p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-[20px] font-semibold display">What you own</h1>
+            <h1 className="text-[20px] font-semibold display">What you own and owe</h1>
             <p className="text-[13px] text-dim mt-1">
               {inv.empty
                 ? 'Add your holdings and update them once a month.'
@@ -67,6 +70,36 @@ export default function Investments({ toast }) {
           </div>
         </div>
 
+        {/*
+          * The same net worth the dashboard shows, not the portfolio in
+          * isolation. Two numbers with the same name on two screens is how a
+          * user ends up trusting neither.
+          */}
+        <div className="surface rounded-2xl p-4 mb-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] uppercase tracking-wider text-faint">Net worth</span>
+            <span className="text-[11.5px] text-faint">everything you own, less what you owe</span>
+          </div>
+          <div className="text-[30px] font-semibold display leading-none mt-1.5">
+            <Money value={worth.netWorth} animate />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+            {[
+              ['Free to spend', worth.spendable, ''],
+              ['In savings', worth.pot, 'text-save'],
+              ['Invested', worth.investments, 'text-invest'],
+              ['Owed', -worth.owed, 'text-bad'],
+            ].map(([label, value, tone]) => (
+              <div key={label}>
+                <div className="text-[10px] uppercase tracking-wider text-faint leading-tight">{label}</div>
+                <div className={`text-[14px] font-semibold display tabular mt-0.5 ${tone}`}>
+                  <Money value={value} compact />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {inv.empty ? (
           <Empty
             icon="coins"
@@ -78,7 +111,7 @@ export default function Investments({ toast }) {
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
               <Stat
-                label="Net worth" icon="coins" tone="invest"
+                label="Portfolio" icon="coins" tone="invest"
                 value={<Money value={inv.netWorth} compact animate />}
                 delta={inv.monthChange} sub="vs last month"
               />
@@ -142,6 +175,8 @@ export default function Investments({ toast }) {
           you already hold. Both belong on this screen; neither belongs in the
           other's card. */}
       <Goals toast={toast} />
+
+      <Debts toast={toast} />
 
       {!inv.empty && (
         <>
@@ -280,6 +315,7 @@ export default function Investments({ toast }) {
         open={updateOpen}
         onClose={() => setUpdateOpen(false)}
         assets={inv.rows}
+        debts={debts.rows}
         defaultMonth={nowMonth}
         onSaved={toast}
       />
@@ -424,7 +460,7 @@ function AssetSheet({ open, editing, onClose, onSaved }) {
  * while contributions start blank — carrying a contribution forward would
  * silently invent money you never paid in.
  */
-function MonthlyUpdateSheet({ open, onClose, assets, defaultMonth, onSaved }) {
+function MonthlyUpdateSheet({ open, onClose, assets, debts = [], defaultMonth, onSaved }) {
   const { state, dispatch } = useStore();
   const cur = state.profile.currency;
   const [month, setMonth] = useState(defaultMonth);
@@ -450,6 +486,17 @@ function MonthlyUpdateSheet({ open, onClose, assets, defaultMonth, onSaved }) {
       next[a.id] = {
         contributed: existing ? existing.contributed : null,
         value: existing ? existing.value : a.value || null,
+      };
+    }
+    // Debts share the draft, keyed by id. Same reasoning as holdings: the
+    // balance carries forward so an unchanged debt needs no typing, while the
+    // amount paid starts blank because carrying it forward would invent a
+    // payment that never happened.
+    for (const d of debts) {
+      const existing = state.debts?.find((x) => x.id === d.id)?.history?.[month];
+      next[d.id] = {
+        paid: existing ? existing.paid : null,
+        balance: existing ? existing.balance : d.balance || null,
       };
     }
     setDraft(next);
@@ -483,7 +530,19 @@ function MonthlyUpdateSheet({ open, onClose, assets, defaultMonth, onSaved }) {
       dispatch({ type: 'setSnapshot', assetId: a.id, month, contributed, value });
       touched += 1;
     }
-    onSaved?.(`${monthLabel(month)} updated — ${touched} ${touched === 1 ? 'holding' : 'holdings'}`);
+    for (const d of debts) {
+      const row = draft[d.id];
+      if (!row) continue;
+      const paid = Number(row.paid) || 0;
+      const balance = Number(row.balance) || 0;
+      // A debt cleared to zero is a real and welcome value, so a blank row is
+      // the only thing that counts as "not touched".
+      if (row.paid == null && row.balance == null) continue;
+      dispatch({ type: 'setDebtSnapshot', debtId: d.id, month, paid, balance });
+      touched += 1;
+    }
+
+    onSaved?.(`${monthLabel(month)} updated — ${touched} ${touched === 1 ? 'entry' : 'entries'}`);
     onClose();
   };
 
@@ -556,6 +615,8 @@ function MonthlyUpdateSheet({ open, onClose, assets, defaultMonth, onSaved }) {
             );
           })}
         </div>
+
+        <DebtUpdateRows debts={debts} draft={draft} setDraft={setDraft} />
 
         <p className="text-[11.5px] text-faint leading-relaxed">
           Leave a row blank to skip it — the previous value carries forward. "Paid in" is only this month's
