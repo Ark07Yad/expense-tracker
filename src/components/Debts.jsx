@@ -8,9 +8,12 @@
  * balance fell by 250 is a fact worth being able to see.
  */
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
 import { useDebts } from '../lib/useFinance';
+
+/* Charts only, and only when a schedule is actually opened. */
+const PayoffSheet = lazy(() => import('./PayoffSheet'));
 import { DEBT_CLASSES, debtClassById } from '../lib/data';
 import { formatMoney, formatPercent, monthLabel } from '../lib/calc';
 import {
@@ -24,6 +27,7 @@ export default function Debts({ toast }) {
   const debts = useDebts(12);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [payoffFor, setPayoffFor] = useState(null);
 
   const openNew = () => {
     setEditing(null);
@@ -38,8 +42,14 @@ export default function Debts({ toast }) {
           debts.empty
             ? 'Mortgages, cards, loans — anything that comes off what you own'
             : `${formatMoney(debts.owed, cur, { compact: true })} outstanding across ${debts.rows.length} ${debts.rows.length === 1 ? 'debt' : 'debts'}` +
-              (debts.monthlyInterest > 0
-                ? ` · about ${formatMoney(debts.monthlyInterest, cur, { compact: true })} a month in interest`
+              (debts.interestTotal
+                ? ` · ${formatMoney(debts.interestTotal.amount, cur, { compact: true })} of it ${
+                    debts.interestTotal.basis === 'observed'
+                      ? 'went on interest this month'
+                      : debts.interestTotal.basis === 'estimated'
+                      ? 'a month in interest, estimated'
+                      : 'in interest, part measured and part estimated'
+                  }`
                 : '')
         }
         action={
@@ -125,12 +135,21 @@ export default function Debts({ toast }) {
                   )}
 
                   {d.payoff.neverClears ? (
-                    <Badge tone="bad">Payments are below the interest</Badge>
+                    <button
+                      onClick={() => setPayoffFor(d)}
+                      className="transition-opacity hover:opacity-80"
+                    >
+                      <Badge tone="bad">Payments are below the interest</Badge>
+                    </button>
                   ) : d.payoff.months ? (
-                    <span className="text-faint">
+                    <button
+                      onClick={() => setPayoffFor(d)}
+                      className="text-faint underline decoration-dotted underline-offset-2
+                                 hover:text-[color:var(--text)] transition-colors"
+                    >
                       clear in {d.payoff.months} {d.payoff.months === 1 ? 'month' : 'months'} at{' '}
                       {formatMoney(d.typicalPayment, cur, { compact: true })} a month
-                    </span>
+                    </button>
                   ) : null}
 
                   {d.paymentMismatch && (
@@ -143,6 +162,12 @@ export default function Debts({ toast }) {
             );
           })}
         </div>
+      )}
+
+      {payoffFor && (
+        <Suspense fallback={null}>
+          <PayoffSheet debt={payoffFor} onClose={() => setPayoffFor(null)} />
+        </Suspense>
       )}
 
       <DebtSheet

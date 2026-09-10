@@ -22,6 +22,7 @@ import {
   daysBetween,
   monthKey,
   monthKeyOf,
+  parseKey,
   pctChange,
   periodLabel,
   periodProgress,
@@ -543,6 +544,75 @@ export function payoffOf({ balance, rate, monthlyPayment }) {
   };
 }
 
+/**
+ * Month-by-month schedule until a debt is cleared.
+ *
+ * Each row splits one payment into the part that services the interest and the
+ * part that actually reduces what you owe. That split is the whole point: early
+ * on, most of a payment does nothing to the balance, and a schedule is the only
+ * honest way to show it — a single "clears in 248 months" says when, never why.
+ *
+ * Returns an empty schedule rather than looping when the payment cannot clear
+ * the debt, for the same reason `payoffOf` returns `neverClears`.
+ */
+export function amortisationOf({ balance, rate, monthlyPayment, maxMonths = 600 }) {
+  let owed = Math.max(0, Number(balance) || 0);
+  const payment = Math.max(0, Number(monthlyPayment) || 0);
+  const annual = Number(rate);
+  const r = Number.isFinite(annual) && annual > 0 ? annual / 100 / 12 : 0;
+
+  if (owed === 0 || payment <= 0) return { rows: [], totalInterest: 0, months: 0, truncated: false };
+  if (r > 0 && payment <= owed * r) {
+    return { rows: [], totalInterest: 0, months: 0, neverClears: true, truncated: false };
+  }
+
+  const rows = [];
+  let totalInterest = 0;
+
+  for (let m = 1; m <= maxMonths && owed > 0.005; m++) {
+    const interest = owed * r;
+    // The final instalment is only what is left, not a full payment.
+    const due = Math.min(payment, owed + interest);
+    const principal = due - interest;
+    owed = Math.max(0, owed - principal);
+    totalInterest += interest;
+    rows.push({ month: m, payment: due, interest, principal, balance: owed });
+  }
+
+  return {
+    rows,
+    totalInterest,
+    months: rows.length,
+    neverClears: false,
+    /** Hit the cap before clearing — a very long mortgage, or a bad rate. */
+    truncated: owed > 0.005,
+  };
+}
+
+/** The schedule collapsed into years, for a chart that does not need 300 bars. */
+export function amortisationByYear(schedule, startDate = todayKey()) {
+  const start = parseKey(startDate);
+  const years = new Map();
+
+  for (const row of schedule.rows) {
+    const d = new Date(start.getFullYear(), start.getMonth() + row.month, 1, 12);
+    const year = d.getFullYear();
+    const acc = years.get(year) || { year, interest: 0, principal: 0, balance: 0 };
+    acc.interest += row.interest;
+    acc.principal += row.principal;
+    acc.balance = row.balance;
+    years.set(year, acc);
+  }
+
+  return [...years.values()].map((y) => ({
+    ...y,
+    label: String(y.year),
+    interest: Math.round(y.interest),
+    principal: Math.round(y.principal),
+    balance: Math.round(y.balance),
+  }));
+}
+
 export function computeDebts(state, months = 12) {
   const debts = state.debts || [];
   const nowMonth = monthKey(todayKey());
@@ -693,6 +763,26 @@ export function computeDebts(state, months = 12) {
     staleDebts: rows.filter((r) => r.monthsStale === null || r.monthsStale >= 2),
     /** Estimated interest accruing across every debt, per month. */
     monthlyInterest: sum(rows, (r) => r.payoff.monthlyInterest || 0),
+
+    /**
+     * The same figures the rows show, added up.
+     *
+     * The header used to total rate-derived estimates while each row showed
+     * what had actually happened, so the two disagreed at a glance and neither
+     * explained the other. `basis` says whether the sum is measured, modelled,
+     * or a mixture — which is the honest answer when some debts have two
+     * snapshots and others do not.
+     */
+    interestTotal: (() => {
+      const withInterest = rows.filter((r) => r.interest);
+      if (!withInterest.length) return null;
+      const bases = new Set(withInterest.map((r) => r.interest.basis));
+      return {
+        amount: sum(withInterest, (r) => r.interest.amount),
+        basis: bases.size > 1 ? 'mixed' : [...bases][0],
+        count: withInterest.length,
+      };
+    })(),
     neverClearing: rows.filter((r) => r.payoff.neverClears),
     mismatched: rows.filter((r) => r.paymentMismatch),
     untagged: rows.filter((r) => r.snapshotPaidThisMonth > 0 && r.loggedThisMonth === 0),

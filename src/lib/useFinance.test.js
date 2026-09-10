@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   balanceAt, budgetForPeriod, budgetLines, byCategory, computeDebts,
   computeFinance, computeInvestments, entriesInRange, monthlyBreakdown, movers,
-  netWorthOf, payoffOf, seriesOf, totalsOf,
+  netWorthOf, payoffOf, seriesOf, totalsOf, amortisationOf, amortisationByYear,
 } from './useFinance';
 import { addMonthKeys, monthKey, todayKey } from './calc';
 
@@ -339,6 +339,75 @@ describe('payoffOf', () => {
   });
 });
 
+describe('amortisationOf', () => {
+  it('splits every payment into interest and principal', () => {
+    const a = amortisationOf({ balance: 1000, rate: 12, monthlyPayment: 100 });
+    const first = a.rows[0];
+    // 1% of 1000 for the first month.
+    expect(first.interest).toBeCloseTo(10, 5);
+    expect(first.principal).toBeCloseTo(90, 5);
+    expect(first.balance).toBeCloseTo(910, 5);
+  });
+
+  it('shrinks the interest share as the balance falls', () => {
+    // The reason a schedule exists: early payments barely touch the balance.
+    const a = amortisationOf({ balance: 10000, rate: 18, monthlyPayment: 300 });
+    expect(a.rows[0].interest).toBeGreaterThan(a.rows[10].interest);
+    expect(a.rows[0].principal).toBeLessThan(a.rows[10].principal);
+  });
+
+  it('ends exactly at zero, with a smaller final instalment', () => {
+    const a = amortisationOf({ balance: 1000, rate: 12, monthlyPayment: 100 });
+    const last = a.rows[a.rows.length - 1];
+    expect(last.balance).toBe(0);
+    expect(last.payment).toBeLessThanOrEqual(100);
+    expect(a.months).toBe(11);
+  });
+
+  it('agrees with the payoff estimate', () => {
+    const args = { balance: 4200, rate: 22.9, monthlyPayment: 400 };
+    expect(amortisationOf(args).months).toBe(payoffOf(args).months);
+  });
+
+  it('handles an interest-free debt', () => {
+    const a = amortisationOf({ balance: 900, rate: 0, monthlyPayment: 300 });
+    expect(a.months).toBe(3);
+    expect(a.totalInterest).toBe(0);
+  });
+
+  it('refuses to schedule a debt the payment cannot clear', () => {
+    const a = amortisationOf({ balance: 5000, rate: 24, monthlyPayment: 80 });
+    expect(a.neverClears).toBe(true);
+    expect(a.rows).toEqual([]);
+  });
+
+  it('returns nothing when no payment is being made', () => {
+    expect(amortisationOf({ balance: 500, rate: 5, monthlyPayment: 0 }).rows).toEqual([]);
+  });
+
+  it('stops at the cap rather than looping', () => {
+    const a = amortisationOf({ balance: 200000, rate: 2, monthlyPayment: 400, maxMonths: 24 });
+    expect(a.rows).toHaveLength(24);
+    expect(a.truncated).toBe(true);
+  });
+});
+
+describe('amortisationByYear', () => {
+  it('collapses the schedule into years', () => {
+    const a = amortisationOf({ balance: 12000, rate: 6, monthlyPayment: 400 });
+    const years = amortisationByYear(a, '2026-01-15');
+    expect(years.length).toBeGreaterThan(1);
+    expect(years[0].label).toBe('2026');
+    // Every payment is accounted for in one bucket or another.
+    const totalPrincipal = years.reduce((n, y) => n + y.principal, 0);
+    expect(totalPrincipal).toBeCloseTo(12000, 0);
+  });
+
+  it('is empty-safe', () => {
+    expect(amortisationByYear({ rows: [] }, '2026-01-15')).toEqual([]);
+  });
+});
+
 describe('debt payments linked to the ledger', () => {
   const nowM = monthKey(todayKey());
   const mk = (n) => addMonthKeys(nowM, n);
@@ -401,6 +470,27 @@ describe('debt payments linked to the ledger', () => {
     const d = computeDebts(withPayment(), 12);
     // 950 at 24% a year is 19 a month.
     expect(d.monthlyInterest).toBeCloseTo(19, 5);
+  });
+
+  it('totals the same figures the rows show, and says what they are', () => {
+    // The header used to sum estimates while the rows showed measurements, so
+    // the two disagreed at a glance and neither explained the other.
+    const d = computeDebts(withPayment(), 12);
+    expect(d.interestTotal.amount).toBe(150);
+    expect(d.interestTotal.basis).toBe('observed');
+  });
+
+  it('calls the total mixed when the rows are not all the same kind', () => {
+    const state = withPayment({
+      entries: [],
+    });
+    state.debts.push({
+      id: 'loan', name: 'Loan', class: 'personal', note: '', rate: 12, createdAt: 2,
+      history: { [nowM]: { paid: 0, balance: 1200 } },
+    });
+    const d = computeDebts(state, 12);
+    expect(d.interestTotal.basis).toBe('mixed');
+    expect(d.interestTotal.count).toBe(2);
   });
 });
 
