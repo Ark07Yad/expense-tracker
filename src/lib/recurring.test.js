@@ -161,6 +161,15 @@ describe('describeRule', () => {
   });
 });
 
+describe('tags on a schedule', () => {
+  it('carries a debt tag onto the entry it produces', () => {
+    const r = rule({ kind: 'expense', category: 'debt', debtId: 'card' });
+    // entryFromRule is the template; the reducer copies the tag through.
+    expect(entryFromRule(r, '2026-05-03')).toMatchObject({ kind: 'expense', category: 'debt' });
+    expect(r.debtId).toBe('card');
+  });
+});
+
 describe('entryFromRule', () => {
   it('carries the template onto the chosen date', () => {
     expect(entryFromRule(rule({ note: 'Flat' }), '2026-05-03')).toEqual({

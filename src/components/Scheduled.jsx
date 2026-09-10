@@ -14,6 +14,8 @@ import { dayLabel, formatMoney, todayKey } from '../lib/calc';
 import {
   FREQUENCIES, describeRule, dueList, dueTotals, nextOccurrence,
 } from '../lib/recurring';
+import { debtsFor } from '../lib/useFinance';
+import { goalsWithProgress } from '../lib/goals';
 import {
   Badge, Button, Card, CategoryDot, ConfirmButton, Empty, Field, Icon, IconButton,
   Input, Money, MoneyInput, SectionTitle, Segmented, Sheet, Textarea, mix, stagger, toneColor,
@@ -294,6 +296,8 @@ const blankRule = () => ({
   amount: null,
   frequency: 'monthly',
   anchorDate: todayKey(),
+  debtId: undefined,
+  goalId: undefined,
 });
 
 export function RecurringSheet({ open, editing, onClose, onSaved }) {
@@ -318,9 +322,18 @@ export function RecurringSheet({ open, editing, onClose, onSaved }) {
   const kind = kindById(draft.kind);
   const cats = categoriesFor(draft.kind);
 
+  const debts = useMemo(() => debtsFor(state, 12).rows.filter((d) => d.balance > 0), [state]);
+  const goals = useMemo(() => goalsWithProgress(state, todayKey()).filter((g) => !g.complete), [state]);
+
   const setKind = (id) => {
     const next = categoriesFor(id);
-    patch({ kind: id, category: next.some((c) => c.id === draft.category) ? draft.category : next[0].id });
+    patch({
+      kind: id,
+      category: next.some((c) => c.id === draft.category) ? draft.category : next[0].id,
+      // A tag only survives while the kind it belongs to does.
+      debtId: id === 'expense' ? draft.debtId : undefined,
+      goalId: id === 'saving' ? draft.goalId : undefined,
+    });
   };
 
   const save = () => {
@@ -435,6 +448,31 @@ export function RecurringSheet({ open, editing, onClose, onSaved }) {
           </div>
         </div>
 
+        {/* The same two tags a one-off entry can carry. A monthly loan payment
+            and a monthly transfer to a goal are the two things people most
+            often automate, and until now a schedule could follow neither. */}
+        {draft.kind === 'expense' && draft.category === 'debt' && debts.length > 0 && (
+          <TagPicker
+            label="Paying off"
+            id="rule-debt-label"
+            noneLabel="Not a debt payment"
+            selected={draft.debtId}
+            onSelect={(v) => patch({ debtId: v })}
+            options={debts.map((d) => ({ id: d.id, name: d.name, icon: d.meta.icon, color: d.meta.color }))}
+          />
+        )}
+
+        {draft.kind === 'saving' && goals.length > 0 && (
+          <TagPicker
+            label="Toward a goal"
+            id="rule-goal-label"
+            noneLabel="General savings"
+            selected={draft.goalId}
+            onSelect={(v) => patch({ goalId: v })}
+            options={goals.map((g) => ({ id: g.id, name: g.name, icon: 'target', color: '#38bdf8' }))}
+          />
+        )}
+
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <span className="block text-[12px] font-medium text-dim mb-1.5">Repeats</span>
@@ -472,5 +510,39 @@ export function RecurringSheet({ open, editing, onClose, onSaved }) {
         </div>
       </div>
     </Sheet>
+  );
+}
+
+/** A row of chips for an optional tag: one "none" option, then the choices. */
+function TagPicker({ label, id, noneLabel, selected, onSelect, options }) {
+  return (
+    <div>
+      <span className="block text-[12px] font-medium text-dim mb-1.5" id={id}>{label}</span>
+      <div className="flex gap-1.5 flex-wrap" role="group" aria-labelledby={id}>
+        <button
+          onClick={() => onSelect(undefined)}
+          className={`px-2.5 py-1.5 rounded-full text-[12.5px] font-medium transition-all active:scale-95 border
+                      ${!selected ? 'bg-brand-500/18 border-brand-400/50 text-brandy' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+        >
+          {noneLabel}
+        </button>
+        {options.map((o) => {
+          const active = selected === o.id;
+          return (
+            <button
+              key={o.id}
+              onClick={() => onSelect(o.id)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12.5px] font-medium
+                          transition-all active:scale-95 border
+                          ${active ? '' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+              style={active ? { background: `${o.color}26`, borderColor: `${o.color}88`, color: o.color } : undefined}
+            >
+              <Icon name={o.icon} className="size-3.5" />
+              {o.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

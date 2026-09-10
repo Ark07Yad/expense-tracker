@@ -338,6 +338,16 @@ function reducer(state, action) {
          * now and the next one next month, rather than a duplicate on the spot.
          */
         lastResolved: r.lastResolved ?? null,
+        /*
+         * A schedule can carry the same tags a one-off entry can.
+         *
+         * Without these, the entries a rule posts were untagged: a monthly loan
+         * payment counted as spending but never against the loan, and a monthly
+         * transfer never against the goal it was for — so the two things people
+         * most often automate were the two the app could not follow.
+         */
+        ...(r.kind === 'expense' && r.debtId ? { debtId: r.debtId } : {}),
+        ...(r.kind === 'saving' && r.goalId ? { goalId: r.goalId } : {}),
         active: true,
         createdAt: Date.now(),
       };
@@ -352,6 +362,9 @@ function reducer(state, action) {
             ? {
                 ...r,
                 ...action.patch,
+                // Switching kind has to drop a tag that no longer applies.
+                debtId: (action.patch.kind ?? r.kind) === 'expense' ? action.patch.debtId ?? r.debtId : undefined,
+                goalId: (action.patch.kind ?? r.kind) === 'saving' ? action.patch.goalId ?? r.goalId : undefined,
                 amount:
                   action.patch.amount !== undefined
                     ? Math.abs(Number(action.patch.amount) || 0)
@@ -395,6 +408,10 @@ function reducer(state, action) {
             createdAt: Date.now(),
             /** Marks the entry as generated, so the ledger can say where it came from. */
             fromRule: rule.id,
+            // Carried through, or a scheduled payment is invisible to the debt
+            // it pays and a scheduled transfer to the goal it feeds.
+            ...(rule.kind === 'expense' && rule.debtId ? { debtId: rule.debtId } : {}),
+            ...(rule.kind === 'saving' && rule.goalId ? { goalId: rule.goalId } : {}),
           });
         }
 

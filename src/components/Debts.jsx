@@ -103,21 +103,24 @@ export default function Debts({ toast }) {
                 )}
 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] mt-2">
-                  {d.rate !== null && (
+                  {/*
+                    * One interest figure. What actually happened when that can
+                    * be worked out, the rate-derived estimate otherwise, and it
+                    * always says which — two numbers here left the reader
+                    * deciding which to believe.
+                    */}
+                  {d.interest && (
                     <span className="text-faint">
-                      {formatPercent(d.rate, 1)} a year ·{' '}
-                      <span className="text-bad">
-                        {formatMoney(d.payoff.monthlyInterest, cur)} a month in interest
-                      </span>
-                    </span>
-                  )}
-
-                  {/* The number that explains a debt paid diligently for a year
-                      that has barely moved. */}
-                  {d.interestThisMonth > 0 && (
-                    <span className="text-faint">
-                      of {formatMoney(d.paidThisMonth, cur, { compact: true })} paid,{' '}
-                      {formatMoney(d.interestThisMonth, cur, { compact: true })} was interest
+                      {d.rate !== null && `${formatPercent(d.rate, 1)} a year · `}
+                      <span className="text-bad">{formatMoney(d.interest.amount, cur)}</span>{' '}
+                      {d.interest.basis === 'observed' ? (
+                        <>
+                          of the {formatMoney(d.paidThisMonth, cur, { compact: true })} you paid this
+                          month was interest
+                        </>
+                      ) : (
+                        'a month in interest, estimated from the rate'
+                      )}
                     </span>
                   )}
 

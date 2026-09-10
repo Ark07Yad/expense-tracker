@@ -629,12 +629,29 @@ export function computeDebts(state, months = 12) {
       const rate = d.rate === null || d.rate === undefined ? null : Number(d.rate);
       const payoff = payoffOf({ balance, rate, monthlyPayment: typicalPayment });
 
+      /*
+       * One interest figure, not two.
+       *
+       * The row used to show both a rate-derived estimate and what last month
+       * actually cost, which is one more interest number than anyone wants and
+       * left the reader to work out which to believe. What actually happened is
+       * always the better answer, so it wins when it can be worked out; the
+       * estimate is the fallback, and each says which it is.
+       */
+      const interest =
+        interestThisMonth !== null
+          ? { amount: interestThisMonth, basis: 'observed' }
+          : rate > 0 && balance > 0
+          ? { amount: payoff.monthlyInterest, basis: 'estimated' }
+          : null;
+
       return {
         ...d,
         meta,
         rate,
         balance,
         opening,
+        interest,
         /** How much of it has been cleared since it was first recorded. */
         clearedSoFar: Math.max(0, opening - balance),
         paidTotal: sum(Object.values(d.history || {}), (h) => h.paid),

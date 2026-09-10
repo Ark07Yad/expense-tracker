@@ -35,6 +35,7 @@ export const seedState = (over = {}) => ({
   },
   entries: over.entries || [],
   assets: over.assets || [],
+  debts: over.debts || [],
   recurring: over.recurring || [],
   goals: over.goals || [],
   notes: [],
