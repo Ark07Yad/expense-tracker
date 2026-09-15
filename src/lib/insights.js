@@ -85,10 +85,10 @@ function buildSection(state, section) {
   const funded = history.filter((h) => h.count > 0);
   const enoughHistory = funded.length >= 3;
 
-  // Nothing to say yet — say that, rather than inventing something. Holdings
-  // and debts are recorded on their own screen and need no ledger, so those
-  // two sections still speak with an empty ledger.
-  if (!state.entries.length && section !== 'investing' && section !== 'debt') {
+  // Nothing to say yet — say that, rather than inventing something. Holdings,
+  // debts and budgets are set on their own screens and need no ledger, so
+  // those sections still speak with an empty ledger.
+  if (!state.entries.length && !['investing', 'debt', 'budgets'].includes(section)) {
     add({
       id: 'empty',
       tone: 'info',
@@ -184,7 +184,7 @@ function buildSection(state, section) {
         icon: 'target',
         title: `No budget set for ${meta.label}`,
         body: `A cap turns this from a number you read afterwards into one you can steer. Based on your history, ${money(proposal)} a month would be a realistic starting point.`,
-        action: { label: 'Set a budget', to: 'settings' },
+        action: { label: 'Set a budget', to: 'settings', intent: 'budgets' },
         priority: 2,
       });
     }
@@ -405,7 +405,7 @@ function buildSection(state, section) {
         icon: 'target',
         title: `${untracked.length} sizeable categories have no budget`,
         body: `${untracked.map((c) => c.label).join(', ')} — together ${money(untracked.reduce((s, c) => s + c.total, 0))} this month, with no cap to compare against.`,
-        action: { label: 'Set budgets', to: 'settings' },
+        action: { label: 'Set budgets', to: 'settings', intent: 'budgets' },
         priority: 3,
       });
     }
@@ -425,7 +425,7 @@ function buildSection(state, section) {
         icon: 'target',
         title: 'No budgets set yet',
         body: 'Budgets are what turn this from a record of what happened into something you can steer mid-month. CoinTrack can propose a starting set from your income and typical spending.',
-        action: { label: 'Set budgets', to: 'settings' },
+        action: { label: 'Set budgets', to: 'settings', intent: 'budgets' },
         priority: 1,
       });
       return out;
@@ -474,7 +474,7 @@ function buildSection(state, section) {
         icon: 'scale',
         title: 'Your budgets add up to more than you earn',
         body: `${money(capTotal)} of caps against ${money(state.profile.monthlyIncome)} of income. A plan that cannot be met even when every category behaves is worth rebalancing.`,
-        action: { label: 'Adjust budgets', to: 'settings' },
+        action: { label: 'Adjust budgets', to: 'settings', intent: 'budgets' },
         priority: 1,
       });
     }

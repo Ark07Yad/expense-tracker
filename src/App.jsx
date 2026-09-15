@@ -202,7 +202,7 @@ export default function App() {
               {tab === 'advisor' && (
                 <Advisor section={advisorSection} setSection={setAdvisorSection} onNavigate={navigate} toast={toast} />
               )}
-              {tab === 'settings' && <Settings toast={toast} />}
+              {tab === 'settings' && <Settings toast={toast} onNavigate={navigate} />}
             </Suspense>
           </div>
         </main>

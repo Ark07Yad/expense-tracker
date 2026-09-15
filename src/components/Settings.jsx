@@ -14,12 +14,13 @@ import { formatMoney, formatPercent, todayKey } from '../lib/calc';
 import { formatBytes } from '../lib/attachments';
 import * as persist from '../lib/persist';
 import ImportSheet from './ImportSheet';
+import SectionTips from './SectionTips';
 import {
   Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money,
   MoneyInput, NumberInput, SectionTitle, Select, Sheet,
 } from './ui';
 
-export default function Settings({ toast }) {
+export default function Settings({ toast, onNavigate }) {
   const { state, dispatch } = useStore();
   const cur = state.profile.currency;
   const fileRef = useRef(null);
@@ -43,6 +44,13 @@ export default function Settings({ toast }) {
   const unallocated = income - budgetTotal - savingsTarget;
 
   const setProfile = (patch) => dispatch({ type: 'profile', patch });
+
+  /** A budget suggestion's action, taken in place: the editor is on this screen. */
+  const goToBudgets = () => {
+    const card = document.getElementById('budgets');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    card?.querySelector('input')?.focus({ preventScroll: true });
+  };
 
   /**
    * Download a backup.
@@ -204,8 +212,20 @@ export default function Settings({ toast }) {
         </Field>
       </Card>
 
+      {/* Above the editor: read what the month says, then change the caps. */}
+      <SectionTips
+        section="budgets"
+        label="Budget suggestions"
+        sub="How this month is running against the caps below"
+        hide={['empty']}
+        intents={{ budgets: goToBudgets }}
+        here="settings"
+        onNavigate={onNavigate}
+        quiet="Every cap looks sensible for this month so far."
+      />
+
       {/* ── Budgets ── */}
-      <Card className="p-5">
+      <Card className="p-5" id="budgets">
         <SectionTitle
           icon="target"
           sub="Monthly ceilings. The week, quarter and year views scale them for you."

@@ -14,6 +14,7 @@ import {
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { useStore } from '../lib/store';
+import SectionTips from './SectionTips';
 import { monthlyBreakdown, useFinance } from '../lib/useFinance';
 import { PERIODS, addDays, dayLabel, formatMoney, formatPercent, parseKey, todayKey } from '../lib/calc';
 import { categoriesFor, categoryById } from '../lib/data';
@@ -494,6 +495,17 @@ export default function Analytics({ onNavigate }) {
           </Card>
         </>
       )}
+      {/* Month-scoped, whatever period the charts above are on: the rules read
+          this month, and the heading says so rather than implying otherwise. */}
+      <SectionTips
+        section="spending"
+        label="Spending suggestions"
+        sub="About this month's spending, whatever period is shown above"
+        hide={['empty']}
+        here="analytics"
+        onNavigate={onNavigate}
+        quiet="Nothing about this month's spending stands out."
+      />
     </div>
   );
 }
