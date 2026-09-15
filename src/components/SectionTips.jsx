@@ -9,16 +9,21 @@
  * Actions resolve in order: an `intent` this screen can handle in place (open a
  * sheet, scroll to an editor), otherwise navigate — unless `to` is the screen
  * you are already on, where navigating would do nothing visible.
+ *
+ * Pass `sections` to make one box switchable between related sections — Trends
+ * carries spending, income and savings in one box rather than three stacked.
+ * Each entry may override `label`, `sub` and `quiet`.
  */
 
 import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { liveSuggestions } from '../lib/insights';
-import { Button, Card, Icon, SectionTitle } from './ui';
+import { Button, Card, Icon, SectionTitle, Segmented } from './ui';
 import SuggestionCard from './SuggestionCard';
 
 export default function SectionTips({
-  section,
+  section: initial,
+  sections = null,
   label,
   sub,
   hide = [],
@@ -31,6 +36,17 @@ export default function SectionTips({
 }) {
   const { state, dispatch } = useStore();
   const [expanded, setExpanded] = useState(false);
+  const [active, setActive] = useState(initial);
+  const current = sections?.find((x) => x.value === active) || {};
+  const section = active;
+  const boxLabel = current.label || label;
+  const boxSub = current.sub || sub;
+  const boxQuiet = current.quiet || quiet;
+
+  const pick = (value) => {
+    setActive(value);
+    setExpanded(false);
+  };
   const hideKey = hide.join('|');
 
   const { cards, hiddenCount, footnote } = useMemo(() => {
@@ -53,10 +69,10 @@ export default function SectionTips({
   const visible = expanded ? cards : cards.slice(0, first);
 
   return (
-    <section aria-label={label}>
+    <section aria-label={boxLabel}>
       <SectionTitle
         icon="compass"
-        sub={sub}
+        sub={boxSub}
         action={
           <div className="flex items-center gap-1.5">
             {hiddenCount > 0 && (
@@ -77,11 +93,21 @@ export default function SectionTips({
         Suggestion box
       </SectionTitle>
 
+      {sections && (
+        <Segmented
+          size="sm"
+          className="mb-3"
+          value={active}
+          onChange={pick}
+          options={sections.map(({ value, label: l, icon }) => ({ value, label: l.replace(/ suggestions$/, ''), icon }))}
+        />
+      )}
+
       {cards.length === 0 ? (
         <Card className="p-4">
           <div className="flex items-center gap-3 text-[13px] text-dim">
             <Icon name="check" className="size-4 text-good shrink-0" />
-            {hiddenCount > 0 ? 'Everything here has been dismissed. Restore them if you want another look.' : quiet}
+            {hiddenCount > 0 ? 'Everything here has been dismissed. Restore them if you want another look.' : boxQuiet}
           </div>
         </Card>
       ) : (

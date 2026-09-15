@@ -496,15 +496,31 @@ export default function Analytics({ onNavigate }) {
         </>
       )}
       {/* Month-scoped, whatever period the charts above are on: the rules read
-          this month, and the heading says so rather than implying otherwise. */}
+          this month, and the heading says so rather than implying otherwise.
+          One box with a switch, not three stacked: all three are this month's
+          cash flow, which is what this screen is about. */}
       <SectionTips
         section="spending"
-        label="Spending suggestions"
-        sub="About this month's spending, whatever period is shown above"
+        sections={[
+          {
+            value: 'spending', label: 'Spending suggestions', icon: 'trendDown',
+            sub: "About this month's spending, whatever period is shown above",
+            quiet: "Nothing about this month's spending stands out.",
+          },
+          {
+            value: 'income', label: 'Income suggestions', icon: 'trendUp',
+            sub: 'What is coming in this month, and how steadily over recent months',
+            quiet: 'Nothing about your income stands out.',
+          },
+          {
+            value: 'saving', label: 'Savings suggestions', icon: 'piggy',
+            sub: 'What you kept this month, your goals, and your cushion',
+            quiet: 'Nothing about your savings stands out.',
+          },
+        ]}
         hide={['empty']}
         here="analytics"
         onNavigate={onNavigate}
-        quiet="Nothing about this month's spending stands out."
       />
     </div>
   );

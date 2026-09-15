@@ -412,3 +412,39 @@ describe('investing observations', () => {
     expect(text).not.toMatch(/\b(buy|sell) (more|now)\b/);
   });
 });
+
+describe('savings follow the kept model', () => {
+  // Saved = earned − spent. Transfers into the pot are where kept money sits,
+  // not the definition of having kept it.
+  const nowM = monthKey(todayKey());
+  const m = (i) => addMonthKeys(nowM, i);
+  const flow = (months) => months.flatMap(([i, earned, spent]) => [
+    entry(`${m(i)}-02`, 'earning', 'salary', earned),
+    entry(`${m(i)}-03`, 'expense', 'housing', spent),
+  ]);
+  const find = (st, section, id) => buildSuggestions(st, section).find((x) => x.id === id);
+
+  it('does not call a month of kept salary a month without saving', () => {
+    const st = state({ entries: flow([[-3, 1000, 600], [-2, 1000, 600], [-1, 1000, 600], [0, 1000, 600]]) });
+    expect(find(st, 'saving', 'savings-inconsistent')).toBeUndefined();
+    const summary = find(st, 'saving', 'savings-summary');
+    expect(summary.title).toMatch(/^Kept .*400 of .*1,000 this month$/);
+    expect(summary.body).toMatch(/None of it has been moved into savings yet/);
+  });
+
+  it('counts months where spending met or passed income', () => {
+    const st = state({ entries: flow([[-3, 1000, 500], [-2, 1000, 1200], [-1, 1000, 1200], [0, 1000, 1200]]) });
+    expect(find(st, 'saving', 'savings-inconsistent').title).toBe('You kept money in 1 of the last 4 months');
+    expect(find(st, 'saving', 'savings-summary').title).toMatch(/^Spent .*200 more than came in/);
+  });
+
+  it('gives the same cushion in the savings and investing sections', () => {
+    const st = state({
+      profile: { openingBalance: 2000, openingSavings: 2000 },
+      entries: flow([[-3, 1500, 1000], [-2, 1500, 1000], [-1, 1500, 1000]]),
+      assets: [{ id: 'f', name: 'Fund', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 10000 } } }],
+    });
+    expect(find(st, 'saving', 'savings-runway').title).toBe('Your cushion: 2.0 months');
+    expect(find(st, 'investing', 'inv-thin-cushion').title).toMatch(/cover 2\.0 months/);
+  });
+});

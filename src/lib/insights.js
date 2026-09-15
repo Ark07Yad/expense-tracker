@@ -520,7 +520,13 @@ function buildSection(state, section) {
         tone: 'info',
         icon: 'flag',
         title: `${formatPercent(top.share)} of your income is ${top.label.toLowerCase()}`,
-        body: `A single source covering ${money(top.total)} of ${money(t.earning)}. Worth knowing how many months of expenses your savings would cover if it paused — currently ${runwayText(state, month, money)}.`,
+        body: (() => {
+          const c = cushionOf(state, history, month);
+          const covers = c.cushion > 0 && c.months !== null
+            ? `${c.months.toFixed(1)} months (${money(c.cushion)})`
+            : 'nothing recorded yet';
+          return `A single source covering ${money(top.total)} of ${money(t.earning)}. Worth knowing how many months of spending your savings pot and cash-like holdings would cover if it paused — currently ${covers}.`;
+        })(),
         priority: 3,
       });
     }
@@ -576,19 +582,47 @@ function buildSection(state, section) {
   if (section === 'saving') {
     const t = month.totals;
     const target = state.profile.savingsTargetPct || 0;
-    const savedMonths = history.filter((h) => h.saving > 0).length;
+    /*
+     * Saving means what you kept — earned minus spent — not only what was
+     * moved into the savings pot. Counting transfers alone told someone who
+     * kept half their salary every month that they "saved in 0 of 6 months",
+     * while the dashboard beside it said the opposite.
+     */
+    const earningMonths = funded.filter((h) => h.earning > 0);
+    const keptMonths = earningMonths.filter((h) => h.saved > 0).length;
 
-    add({
-      id: 'savings-summary',
-      tone: t.saving > 0 ? 'good' : 'info',
-      icon: 'piggy',
-      title: t.saving > 0 ? `${money(t.saving)} set aside this month` : 'Nothing set aside yet this month',
-      body:
-        t.earning > 0
-          ? `That is ${formatPercent((t.saving / t.earning) * 100)} of the ${money(t.earning)} that came in. Across everything, you kept ${formatPercent(t.savingsRate)} of your income this month.`
-          : 'Log your income too and this becomes a rate rather than a raw number.',
-      priority: t.saving > 0 ? 4 : 2,
-    });
+    if (t.earning <= 0) {
+      add({
+        id: 'savings-summary',
+        tone: 'info',
+        icon: 'piggy',
+        title: 'What you kept is not measurable yet',
+        body: 'Log what came in this month and this becomes earned minus spent, and a rate against your income.',
+        priority: 2,
+      });
+    } else if (t.saved >= 0) {
+      add({
+        id: 'savings-summary',
+        tone: t.saved > 0 ? 'good' : 'info',
+        icon: 'piggy',
+        title: `Kept ${money(t.saved)} of ${money(t.earning)} this month`,
+        body: `${formatPercent(t.savingsRate)} of what came in, after spending.${
+          t.setAside > 0
+            ? ` ${money(t.setAside)} of it has been moved into savings.`
+            : ' None of it has been moved into savings yet, so it is still in your spendable balance.'
+        }`,
+        priority: 4,
+      });
+    } else {
+      add({
+        id: 'savings-summary',
+        tone: 'warn',
+        icon: 'piggy',
+        title: `Spent ${money(-t.saved)} more than came in this month`,
+        body: `${money(t.expense)} out against ${money(t.earning)} in. The difference came out of what you already had.`,
+        priority: 2,
+      });
+    }
 
     if (target > 0 && t.earning > 0 && t.savingsRate < target) {
       add({
@@ -601,13 +635,13 @@ function buildSection(state, section) {
       });
     }
 
-    if (enoughHistory && savedMonths < funded.length * 0.6) {
+    if (earningMonths.length >= 3 && keptMonths < earningMonths.length * 0.6) {
       add({
         id: 'savings-inconsistent',
         tone: 'info',
         icon: 'calendar',
-        title: `You saved in ${savedMonths} of the last ${funded.length} months`,
-        body: 'Irregular saving usually means it happens with whatever is left, which is rarely much. A fixed amount on payday is smaller but adds up to more.',
+        title: `You kept money in ${keptMonths} of the last ${earningMonths.length} months`,
+        body: 'In the other months spending met or passed what came in. Irregular saving usually means it happens with whatever is left, which is rarely much; a fixed amount moved on payday is smaller but adds up to more.',
         priority: 3,
       });
     }
@@ -665,12 +699,18 @@ function buildSection(state, section) {
       });
     }
 
+    const cush = cushionOf(state, history, month);
     add({
       id: 'savings-runway',
-      tone: 'info',
+      tone: cush.months === null ? 'info' : cush.months < 1 ? 'warn' : cush.months >= 6 ? 'good' : 'info',
       icon: 'shield',
-      title: 'Your cushion',
-      body: `Against a typical month of ${money(avg(funded.map((h) => h.expense)) || month.totals.expense)}, your recorded savings and liquid holdings cover ${runwayText(state, month, money)}.`,
+      title: cush.cushion > 0 && cush.months !== null ? `Your cushion: ${cush.months.toFixed(1)} months` : 'Your cushion',
+      body:
+        cush.cushion <= 0
+          ? 'Nothing in the savings pot or in cash-like holdings yet — this is the money you could reach without selling anything.'
+          : `${money(cush.pot)} in the savings pot${cush.liquid > 0 ? ` and ${money(cush.liquid)} in cash-like holdings` : ''}${
+              cush.months !== null ? `, against a typical ${money(cush.typical)} of spending a month` : ''
+            }. That is the money you could reach without selling anything.`,
       priority: 3,
     });
 
@@ -1007,14 +1047,11 @@ function buildSection(state, section) {
      * Money that can be reached without selling anything, measured in months of
      * your own spending, set against the part of the portfolio whose value moves.
      */
-    const spendMonths = history.slice(0, -1).filter((h) => h.expense > 0);
-    const typicalSpend = avg(spendMonths.map((h) => h.expense)) || month.totals.expense;
+    const cush = cushionOf(state, history, month);
     const moving = inv.byClass.filter((c) => c.risk >= 3).reduce((s, c) => s + c.value, 0);
-    if (typicalSpend > 0 && moving > 0) {
-      const worth = netWorthOf(state);
-      const liquid = inv.byClass.filter((c) => c.id === 'cash' || c.id === 'bond').reduce((s, c) => s + c.value, 0);
-      const cushion = Math.max(0, worth.pot) + liquid;
-      const covers = cushion / typicalSpend;
+    if (cush.months !== null && moving > 0) {
+      const { cushion, typical: typicalSpend } = cush;
+      const covers = cush.months;
       if (covers < 3) {
         add({
           id: 'inv-thin-cushion',
@@ -1067,20 +1104,27 @@ function sortRules(a, b) {
   return RANK[a.tone] - RANK[b.tone];
 }
 
-/** Months of typical spending covered by savings entries plus liquid holdings. */
-function runwayText(state, month, money) {
-  const savedTotal = state.entries
-    .filter((e) => e.kind === 'saving')
-    .reduce((s, e) => s + Math.abs(Number(e.amount) || 0), 0);
-  const inv = investmentsFor(state, 12);
-  const liquid = inv.byClass
-    .filter((c) => c.id === 'cash' || c.id === 'bond')
-    .reduce((s, c) => s + c.value, 0);
-  const cushion = savedTotal + liquid;
-  const burn = month.totals.expense || 1;
-  const months = cushion / burn;
-  if (cushion <= 0) return 'nothing recorded yet';
-  return `${months.toFixed(1)} months (${money(cushion)})`;
+/**
+ * Money reachable without selling anything, in months of typical spending.
+ *
+ * The savings pot as net worth counts it (opening savings, less withdrawals,
+ * less what became holdings) plus cash and deposit holdings, against the
+ * average of finished months — a half-done month would make it look huge.
+ * Shared by the savings, income and investing sections so all three say the
+ * same number.
+ */
+function cushionOf(state, history, month) {
+  return memoByState(state, 'cushion', () => {
+    const inv = investmentsFor(state, 12);
+    const liquid = inv.byClass
+      .filter((c) => c.id === 'cash' || c.id === 'bond')
+      .reduce((s, c) => s + c.value, 0);
+    const pot = Math.max(0, netWorthOf(state).pot);
+    const finished = history.slice(0, -1).filter((h) => h.expense > 0);
+    const typical = avg(finished.map((h) => h.expense)) || month.totals.expense;
+    const cushion = pot + liquid;
+    return { pot, liquid, cushion, typical, months: typical > 0 ? cushion / typical : null };
+  });
 }
 
 /** Suggestions for a section, minus anything the user has dismissed. */

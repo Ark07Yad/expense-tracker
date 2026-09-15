@@ -79,3 +79,46 @@ describe('spending suggestions', () => {
     expect(onNavigate).toHaveBeenCalledWith('settings');
   });
 });
+
+describe('one box, several sections', () => {
+  const sections = [
+    { value: 'spending', label: 'Spending suggestions', quiet: 'Spending is quiet.' },
+    { value: 'income', label: 'Income suggestions' },
+    { value: 'saving', label: 'Savings suggestions' },
+  ];
+
+  it('switches between spending, income and savings', async () => {
+    seed({ entries: [entry({ date: day(2), category: 'dining', amount: 500 })] });
+    const onNavigate = vi.fn();
+    const { user } = renderWithStore(
+      <SectionTips section="spending" sections={sections} hide={['empty']} here="analytics" onNavigate={onNavigate} />
+    );
+
+    expect(screen.getByRole('region', { name: 'Spending suggestions' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Income' }));
+    expect(screen.getByRole('region', { name: 'Income suggestions' })).toBeInTheDocument();
+    expect(screen.getByText('Nothing logged as income this month')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Savings' }));
+    // No income logged, so what was kept cannot be measured yet.
+    expect(screen.getByText('What you kept is not measurable yet')).toBeInTheDocument();
+
+    // Notes follow the section on show, not the one the box started on.
+    await user.click(screen.getByRole('button', { name: /notes/i }));
+    expect(onNavigate).toHaveBeenCalledWith('section:saving');
+  });
+
+  it('counts dismissals per section', async () => {
+    seed({ entries: [entry({ date: day(2), category: 'dining', amount: 500 })] });
+    const { user } = renderWithStore(
+      <SectionTips section="income" sections={sections} hide={['empty']} here="analytics" />
+    );
+    const card = screen.getByText('Nothing logged as income this month').closest('.p-4');
+    await user.click(card.querySelector('button[aria-label="Dismiss"]'));
+    expect(screen.getByRole('button', { name: /restore 1/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Spending' }));
+    expect(screen.queryByRole('button', { name: /restore/i })).toBeNull();
+  });
+});
