@@ -218,7 +218,8 @@ export default function Advisor({ section, setSection, onNavigate, toast }) {
       <p className="text-[11.5px] text-faint leading-relaxed px-1 pb-2">
         Every suggestion here is a rule applied to the entries you have logged — there is no model and nothing
         leaves your browser. The investments section describes the holdings you recorded; it does not value them
-        for you and it is not financial advice.
+        for you and it is not financial advice. "Ask AI" on the Invest screen is separate and optional: it sends
+        a summary you review first to a provider you choose.
       </p>
     </div>
   );

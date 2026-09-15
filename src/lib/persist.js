@@ -466,6 +466,10 @@ export async function restoreSnapshot(day) {
 export async function clearAll() {
   try {
     localStorage.removeItem(LS_KEY);
+    // AI provider settings and any remembered API keys (see lib/ai/config.js).
+    // Not part of the ledger, but "erase everything" has to mean everything.
+    localStorage.removeItem('cointrack.ai.v1');
+    sessionStorage.removeItem('cointrack.ai.keys');
   } catch { /* ignore */ }
 
   try {

@@ -21,10 +21,17 @@
  * weaker attack than script injection — it cannot read storage or make
  * requests. Dropping it would break the UI to close a much smaller hole.
  *
- * `connect-src` is 'self' and nothing else, because the app genuinely makes no
- * network requests: no backend, no analytics, no price feed. If a future
- * version talks to anything, it has to be listed here or the call fails
- * silently in the console rather than visibly in the UI.
+ * `connect-src` lists exactly the AI providers someone can choose under
+ * "Ask AI", and nothing else: no backend, no analytics, no price feed. Those
+ * calls only happen when the person asks, with their own key, after seeing
+ * what will be sent. The local ports are Ollama (11434) and LM Studio (1234)
+ * on the person's own machine. Anything not listed fails in the console, so a
+ * new provider has to be added here too — `ai/csp.test.js` checks the two
+ * lists agree.
+ *
+ * No `upgrade-insecure-requests`: every asset is already same-origin or https,
+ * and the directive can rewrite the http://localhost model URLs to https, which
+ * nothing is listening on.
  *
  * `worker-src` and `manifest-src` are what let the offline shell install at
  * all — without them the service worker registration and the install prompt
@@ -41,7 +48,18 @@ export function securityHeaders() {
       "font-src 'self' https://fonts.gstatic.com",
       // data: for the inline SVG favicon, blob: for the JSON backup export.
       "img-src 'self' data: blob:",
-      "connect-src 'self'",
+      [
+        "connect-src 'self'",
+        'https://openrouter.ai',
+        'https://generativelanguage.googleapis.com',
+        'https://api.groq.com',
+        'https://api.openai.com',
+        'https://api.anthropic.com',
+        'http://localhost:11434',
+        'http://127.0.0.1:11434',
+        'http://localhost:1234',
+        'http://127.0.0.1:1234',
+      ].join(' '),
       // The offline shell in public/sw.js, and the install manifest.
       "worker-src 'self'",
       "manifest-src 'self'",
@@ -49,7 +67,6 @@ export function securityHeaders() {
       "base-uri 'self'",          // stops an injected <base> retargeting URLs
       "form-action 'self'",
       "frame-ancestors 'none'",   // clickjacking
-      'upgrade-insecure-requests',
     ].join('; '),
 
     // For older browsers that ignore frame-ancestors.

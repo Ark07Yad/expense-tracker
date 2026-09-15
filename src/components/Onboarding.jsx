@@ -98,7 +98,8 @@ export default function Onboarding() {
               </h1>
               <p className="text-[13.5px] text-dim mt-2 leading-relaxed">
                 Everything stays on this device. No account, no sync, no server — the data lives in your
-                browser's storage and never leaves it.
+                browser's storage and never leaves it, unless you choose to ask an AI model for guidance,
+                and then only a summary you see first.
               </p>
 
               <div className="grid sm:grid-cols-2 gap-3 mt-6">

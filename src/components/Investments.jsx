@@ -12,7 +12,7 @@
  * return.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
@@ -24,6 +24,9 @@ import { addMonthKeys, formatMoney, formatPercent, monthKey, monthLabel, todayKe
 import Goals from './Goals';
 import Debts, { DebtUpdateRows } from './Debts';
 import InvestTips from './InvestTips';
+
+/* Loaded only when someone asks: it carries the AI provider code. */
+const AiAdvisor = lazy(() => import('./AiAdvisor'));
 import {
   Badge, Bar, Button, Card, CategoryDot, ConfirmButton, Empty, Field, Icon,
   IconButton, Input, Money, MoneyInput, SectionTitle, Select, Sheet, Stat,
@@ -39,6 +42,7 @@ export default function Investments({ toast, onNavigate }) {
   const [addOpen, setAddOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const nowMonth = monthKey(todayKey());
 
@@ -57,7 +61,11 @@ export default function Investments({ toast, onNavigate }) {
                   }`}
             </p>
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button variant="ghost" size="sm" onClick={() => setAiOpen(true)}>
+              <Icon name="spark" className="size-3.5" />
+              Ask AI
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setAddOpen(true)}>
               <Icon name="plus" className="size-3.5" />
               Add holding
@@ -287,6 +295,12 @@ export default function Investments({ toast, onNavigate }) {
             <ContributionTable assets={inv.assets} currency={cur} onEdit={() => setUpdateOpen(true)} />
           </Card>
         </>
+      )}
+
+      {aiOpen && (
+        <Suspense fallback={null}>
+          <AiAdvisor onClose={() => setAiOpen(false)} />
+        </Suspense>
       )}
 
       <AssetSheet
