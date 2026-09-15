@@ -22,7 +22,7 @@
  *      dismissed next month instead of resurfacing with a new random key.
  */
 
-import { debtsFor, financeFor, investmentsFor, memoByState } from './useFinance';
+import { debtsFor, financeFor, investmentsFor, memoByState, netWorthOf } from './useFinance';
 import { goalsWithProgress } from './goals';
 import { categoryById } from './data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, todayKey } from './calc';
@@ -85,8 +85,10 @@ function buildSection(state, section) {
   const funded = history.filter((h) => h.count > 0);
   const enoughHistory = funded.length >= 3;
 
-  // Nothing to say yet — say that, rather than inventing something.
-  if (!state.entries.length) {
+  // Nothing to say yet — say that, rather than inventing something. Holdings
+  // and debts are recorded on their own screen and need no ledger, so those
+  // two sections still speak with an empty ledger.
+  if (!state.entries.length && section !== 'investing' && section !== 'debt') {
     add({
       id: 'empty',
       tone: 'info',
@@ -793,7 +795,7 @@ function buildSection(state, section) {
         icon: 'chart',
         title: 'No holdings recorded',
         body: 'Add what you already hold — funds, deposits, gold, property — and update the values once a month. The point is a single running figure for what you own, not a live price feed.',
-        action: { label: 'Add a holding', to: 'investments' },
+        action: { label: 'Add a holding', to: 'investments', intent: 'add' },
         priority: 1,
       });
       return out;
@@ -815,7 +817,7 @@ function buildSection(state, section) {
         icon: 'clock',
         title: `${inv.staleAssets.length} ${inv.staleAssets.length === 1 ? 'holding has' : 'holdings have'} not been revalued recently`,
         body: `${inv.staleAssets.map((a) => a.name).join(', ')}. Everything above carries the last value you entered forward, so a stale figure quietly distorts the whole net-worth line.`,
-        action: { label: 'Update values', to: 'investments' },
+        action: { label: 'Update values', to: 'investments', intent: 'update' },
         priority: 1,
       });
     }
@@ -839,7 +841,7 @@ function buildSection(state, section) {
         icon: 'calendar',
         title: 'No contribution recorded this month',
         body: `Nothing logged as paid in for ${new Date().toLocaleDateString(undefined, { month: 'long' })}. If you did invest, recording it keeps the gain figure honest — otherwise every deposit reads as growth.`,
-        action: { label: 'Record a contribution', to: 'investments' },
+        action: { label: 'Record a contribution', to: 'investments', intent: 'update' },
         priority: 2,
       });
     }
@@ -856,6 +858,193 @@ function buildSection(state, section) {
         body: `${money(savedToInvest)} logged as moved to investments, but ${money(inv.contributedThisMonth)} recorded as contributed. One of the two is probably missing an entry.`,
         priority: 2,
       });
+    }
+
+    /*
+     * Beyond housekeeping: what the recorded figures actually show.
+     *
+     * Same boundary as everything above — each of these states a figure and
+     * what it is made of. None says what to do about it.
+     */
+    const nowM = monthKey(todayKey());
+    const firstM = inv.series[0]?.key || nowM;
+    const paidInDuring = (m) =>
+      inv.assets.reduce((s, a) => s + (Number(a.history?.[m]?.contributed) || 0), 0);
+    const valueAt = (a, m) => {
+      const k = Object.keys(a.history || {}).filter((x) => x <= m).sort().pop();
+      return k ? Number(a.history[k].value) || 0 : null;
+    };
+    const monthName = (m) => new Date(`${m}-01T12:00:00`).toLocaleDateString(undefined, { month: 'short' });
+
+    // One holding carrying the portfolio. Distinct from the class rule: five
+    // funds in one class are spread by holding; one fund at 70% is not.
+    const biggest = inv.rows[0];
+    const biggestShare = biggest && inv.netWorth > 0 ? (biggest.value / inv.netWorth) * 100 : 0;
+    // When that holding is its class's only member the class rule has already
+    // said this, in the same number.
+    const saidByClass =
+      biggest && top?.id === biggest.class && top.count === 1 && top.share > 60 && inv.byClass.length > 1;
+    if (inv.rows.length > 1 && biggestShare > 50 && !saidByClass) {
+      add({
+        id: `inv-top-holding-${biggest.id}`,
+        tone: 'info',
+        icon: 'layers',
+        title: `${biggest.name} is ${formatPercent(biggestShare)} of the portfolio`,
+        body: `${money(biggest.value)} of ${money(inv.netWorth)} sits in a single holding, so its movements are most of the portfolio's movements. Whether that is intended is yours to judge.`,
+        priority: 3,
+      });
+    }
+
+    // Worth noticeably less than what went in. A figure, not a verdict.
+    const under = inv.rows.filter((r) => r.invested > 0 && r.gainPct <= -10);
+    if (under.length) {
+      const worst = under.reduce((a, b) => (a.gainPct <= b.gainPct ? a : b));
+      add({
+        id: 'inv-below-paid-in',
+        tone: 'warn',
+        icon: 'trendDown',
+        title:
+          under.length === 1
+            ? `${worst.name} is worth ${formatPercent(Math.abs(worst.gainPct), 1)} less than you paid in`
+            : `${under.length} holdings are worth less than you paid in`,
+        body: `${under
+          .map((r) => `${r.name}: ${money(r.value)} against ${money(r.invested)} paid in`)
+          .join('; ')}. That is as current as the last value you entered, and it is a paper figure until something is sold.`,
+        action: { label: 'Update values', to: 'investments', intent: 'update' },
+        priority: 3,
+      });
+    }
+
+    /*
+     * How much of the growth was growth.
+     *
+     * Only holdings that already existed at the start of the window count —
+     * otherwise adding an old holding today reads as a month of spectacular
+     * returns — and the rule stays silent while anything is stale, because a
+     * carried-forward value would make the split fiction.
+     */
+    const lookback = Math.min(6, inv.series.length - 1);
+    if (lookback >= 3 && !inv.staleAssets.length) {
+      const from = addMonthKeys(nowM, -lookback);
+      const held = inv.assets.filter((a) => valueAt(a, from) !== null);
+      const start = held.reduce((s, a) => s + valueAt(a, from), 0);
+      const end = held.reduce((s, a) => s + (valueAt(a, nowM) || 0), 0);
+      const paidIn = held.reduce(
+        (s, a) =>
+          s + Object.entries(a.history || {})
+            .filter(([k]) => k > from && k <= nowM)
+            .reduce((t, [, h]) => t + (Number(h.contributed) || 0), 0),
+        0
+      );
+      const movement = end - start - paidIn;
+      if (held.length && start > 0 && Math.abs(movement) >= 1) {
+        add({
+          id: 'inv-growth-split',
+          tone: movement >= 0 ? 'good' : 'info',
+          icon: 'wave',
+          title:
+            movement >= 0
+              ? `${money(movement)} of growth beyond what you paid in`
+              : `Values fell ${money(Math.abs(movement))} beyond what you paid in`,
+          body: `Over the last ${lookback} months these holdings went from ${money(start)} to ${money(end)}. ${money(paidIn)} of that change was your own contributions; the other ${money(movement, { sign: true })} was the holdings themselves moving (${formatPercent((movement / start) * 100, 1)} of where they started).`,
+          priority: 4,
+        });
+      }
+    }
+
+    // Contribution rhythm across the last six finished months.
+    const rhythm = [];
+    for (let i = 6; i >= 1; i--) {
+      const m = addMonthKeys(nowM, -i);
+      if (m >= firstM) rhythm.push({ m, paid: paidInDuring(m) });
+    }
+    if (rhythm.length >= 3) {
+      const withPay = rhythm.filter((r) => r.paid > 0);
+      const gaps = rhythm.filter((r) => r.paid <= 0);
+      const avgPaid = withPay.length ? withPay.reduce((s, r) => s + r.paid, 0) / withPay.length : 0;
+      if (!gaps.length) {
+        add({
+          id: 'inv-rhythm-steady',
+          tone: 'good',
+          icon: 'repeat',
+          title: `Contributions recorded in each of the last ${rhythm.length} months`,
+          body: `An average of ${money(avgPaid)} a month, never a month skipped. A regular figure is also what keeps the gain line honest.`,
+          priority: 4,
+        });
+      } else if (withPay.length) {
+        add({
+          id: 'inv-rhythm-gaps',
+          tone: 'info',
+          icon: 'calendar',
+          title: `Contributions in ${withPay.length} of the last ${rhythm.length} months`,
+          body: `Nothing recorded for ${gaps.map((g) => monthName(g.m)).join(', ')}; the months that had one averaged ${money(avgPaid)}. If money did go in, recording it stops those deposits reading as growth later.`,
+          action: { label: 'Record a contribution', to: 'investments', intent: 'update' },
+          priority: 4,
+        });
+      }
+    }
+
+    // What share of income is going into holdings, over finished months.
+    const finished = history.slice(0, -1).slice(-3).filter((h) => h.earning > 0);
+    if (finished.length >= 2) {
+      const earned = finished.reduce((s, h) => s + h.earning, 0);
+      const paid = finished.reduce((s, h) => s + paidInDuring(h.month), 0);
+      if (paid > 0) {
+        add({
+          id: 'inv-share-of-income',
+          tone: 'info',
+          icon: 'percent',
+          title: `About ${formatPercent((paid / earned) * 100)} of income went into holdings`,
+          body: `${money(paid / finished.length)} a month recorded as paid in, against ${money(earned / finished.length)} a month earned, over the last ${finished.length} finished months. Contributions that never passed through the ledger — an employer's pension share, say — are counted too, so this can run high.`,
+          priority: 4,
+        });
+      }
+    }
+
+    /*
+     * The cushion beside the portfolio.
+     *
+     * Money that can be reached without selling anything, measured in months of
+     * your own spending, set against the part of the portfolio whose value moves.
+     */
+    const spendMonths = history.slice(0, -1).filter((h) => h.expense > 0);
+    const typicalSpend = avg(spendMonths.map((h) => h.expense)) || month.totals.expense;
+    const moving = inv.byClass.filter((c) => c.risk >= 3).reduce((s, c) => s + c.value, 0);
+    if (typicalSpend > 0 && moving > 0) {
+      const worth = netWorthOf(state);
+      const liquid = inv.byClass.filter((c) => c.id === 'cash' || c.id === 'bond').reduce((s, c) => s + c.value, 0);
+      const cushion = Math.max(0, worth.pot) + liquid;
+      const covers = cushion / typicalSpend;
+      if (covers < 3) {
+        add({
+          id: 'inv-thin-cushion',
+          tone: 'warn',
+          icon: 'shield',
+          title: `Savings and cash-like holdings cover ${covers.toFixed(1)} months of spending`,
+          body: `${money(cushion)} in the savings pot and cash or deposit holdings, against ${money(typicalSpend)} of typical monthly spending. Beside it, ${money(moving)} sits in holdings whose value moves — the part that can be down on the day the money is needed.`,
+          priority: 2,
+        });
+      }
+    }
+
+    // Investing while carrying expensive debt: both figures, side by side.
+    const debtInfo = debtsFor(state, 12);
+    const recentPaid = Math.max(inv.contributedThisMonth, paidInDuring(addMonthKeys(nowM, -1)));
+    if (!debtInfo.empty && recentPaid > 0) {
+      const costly = debtInfo.rows
+        .filter((d) => d.balance > 0 && d.rate !== null && d.rate >= 8)
+        .sort((a, b) => b.rate - a.rate)[0];
+      if (costly) {
+        add({
+          id: `inv-costly-debt-${costly.id}`,
+          tone: 'warn',
+          icon: 'scale',
+          title: `${costly.name} charges ${formatPercent(costly.rate, 1)} while money goes into holdings`,
+          body: `${money(costly.balance)} outstanding at ${formatPercent(costly.rate, 1)} a year — about ${money((costly.balance * costly.rate) / 100 / 12)} a month in interest — alongside ${money(recentPaid)} paid into holdings in a recent month. Which comes first depends on things this app does not know; the two numbers are here so they are seen together.`,
+          action: { label: 'Look at debts', to: 'section:debt' },
+          priority: 2,
+        });
+      }
     }
 
     add({

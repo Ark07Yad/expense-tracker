@@ -25,6 +25,8 @@ const state = (over = {}) => ({
   },
   entries: over.entries || [],
   assets: over.assets || [],
+  debts: over.debts || [],
+  recurring: [], goals: [],
   notes: [], dismissed: over.dismissed || [],
 });
 
@@ -272,5 +274,141 @@ describe('headlineSuggestions', () => {
     expect(before).toContain('net-negative');
     const after = headlineSuggestions(state({ ...base, dismissed: ['net-negative'] }), 5).map((s) => s.id);
     expect(after).not.toContain('net-negative');
+  });
+});
+
+describe('investing observations', () => {
+  const nowM = monthKey(todayKey());
+  const m = (i) => addMonthKeys(nowM, i);
+  const ids = (st) => buildSuggestions(st, 'investing').map((x) => x.id);
+  const find = (st, id) => buildSuggestions(st, 'investing').find((x) => x.id === id);
+  const spend = [entry(thisMonth(1), 'expense', 'dining', 10)];
+
+  /** A holding recorded every month from `from` to now. */
+  const monthly = (id, cls, from, valueAt, paid = 100, over = {}) => {
+    const history = {};
+    for (let i = from; i <= 0; i++) history[m(i)] = { contributed: paid, value: valueAt(i) };
+    return { id, name: id, class: cls, note: '', createdAt: 1, history, ...over };
+  };
+
+  it('names a single holding carrying most of the portfolio', () => {
+    const st = state({
+      entries: spend,
+      assets: [
+        { id: 'big', name: 'Big fund', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 9000 } } },
+        { id: 'fd', name: 'FD', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 1000 } } },
+      ],
+    });
+    expect(find(st, 'inv-top-holding-big').title).toMatch(/Big fund is 90%/);
+  });
+
+  it('does not repeat the class figure when one holding is the whole class', () => {
+    const st = state({
+      entries: spend,
+      assets: [
+        { id: 'big', name: 'Big fund', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 9000 } } },
+        { id: 'g', name: 'Gold', class: 'gold', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 1000 } } },
+      ],
+    });
+    expect(ids(st)).toContain('inv-concentration-fund');
+    expect(ids(st)).not.toContain('inv-top-holding-big');
+  });
+
+  it('flags holdings worth well under what went in', () => {
+    const st = state({
+      entries: spend,
+      assets: [{ id: 'x', name: 'Crypto', class: 'crypto', note: '', createdAt: 1, history: { [nowM]: { contributed: 1000, value: 800 } } }],
+    });
+    expect(find(st, 'inv-below-paid-in').title).toMatch(/Crypto is worth 20\.0% less/);
+  });
+
+  it('splits growth into contributions and movement', () => {
+    // 1000 six months ago, 600 paid in since, 2000 now: 400 is movement.
+    const st = state({ entries: spend, assets: [monthly('f', 'fund', -6, (i) => (i === 0 ? 2000 : 1000 + (i + 6) * 100))] });
+    const s = find(st, 'inv-growth-split');
+    expect(s.title).toMatch(/400 of growth beyond/);
+    expect(s.body).toMatch(/600 of that change was your own contributions/);
+  });
+
+  it('does not count a holding added mid-window as growth', () => {
+    const st = state({
+      entries: spend,
+      assets: [
+        monthly('old', 'fund', -6, () => 1000, 0),
+        { id: 'new', name: 'new', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 50000 } } },
+      ],
+    });
+    expect(ids(st)).not.toContain('inv-growth-split');
+  });
+
+  it('keeps quiet about growth while a value is stale', () => {
+    const a = monthly('f', 'fund', -6, (i) => 1000 + (i + 6) * 300);
+    delete a.history[m(0)];
+    delete a.history[m(-1)];
+    expect(ids(state({ entries: spend, assets: [a] }))).not.toContain('inv-growth-split');
+  });
+
+  it('describes the contribution rhythm, steady or gapped', () => {
+    const steady = state({ entries: spend, assets: [monthly('f', 'fund', -6, () => 1000)] });
+    expect(find(steady, 'inv-rhythm-steady').title).toMatch(/each of the last 6 months/);
+
+    const gapped = monthly('f', 'fund', -6, () => 1000);
+    gapped.history[m(-2)].contributed = 0;
+    gapped.history[m(-4)].contributed = 0;
+    expect(find(state({ entries: spend, assets: [gapped] }), 'inv-rhythm-gaps').title)
+      .toMatch(/in 4 of the last 6 months/);
+  });
+
+  it('puts contributions against income over finished months', () => {
+    const entries = [-3, -2, -1].map((i) => entry(`${m(i)}-05`, 'earning', 'salary', 1000));
+    const st = state({ entries: [...entries, ...spend], assets: [monthly('f', 'fund', -3, () => 1000, 100)] });
+    expect(find(st, 'inv-share-of-income').title).toMatch(/About 10% of income/);
+  });
+
+  it('sets a thin cushion beside the holdings that move', () => {
+    const entries = [-3, -2, -1].map((i) => entry(`${m(i)}-05`, 'expense', 'housing', 1000));
+    const risky = { id: 'f', name: 'Fund', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 10000 } } };
+    expect(ids(state({ entries, assets: [risky] }))).toContain('inv-thin-cushion');
+
+    const cash = { id: 'c', name: 'Liquid', class: 'cash', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 5000 } } };
+    expect(ids(state({ entries, assets: [risky, cash] }))).not.toContain('inv-thin-cushion');
+  });
+
+  it('shows expensive debt alongside contributions', () => {
+    const st = state({
+      entries: spend,
+      assets: [{ id: 'f', name: 'Fund', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 200, value: 5000 } } }],
+      debts: [{ id: 'card', name: 'Card', class: 'card', rate: 22, note: '', createdAt: 1, history: { [nowM]: { paid: 100, balance: 4000 } } }],
+    });
+    expect(find(st, 'inv-costly-debt-card').title).toMatch(/Card charges 22\.0%/);
+  });
+
+  it('stays descriptive across every new rule', () => {
+    const entries = [-3, -2, -1].flatMap((i) => [
+      entry(`${m(i)}-05`, 'earning', 'salary', 1000),
+      entry(`${m(i)}-06`, 'expense', 'housing', 900),
+    ]);
+    const gapped = monthly('big', 'fund', -6, (i) => (i === 0 ? 9000 : 5000));
+    gapped.history[m(-2)].contributed = 0;
+    const st = state({
+      entries,
+      assets: [
+        gapped,
+        // A second fund, so the big one is not its class's only member and the
+        // top-holding rule is not folded into the class rule.
+        { id: 'small', name: 'Small fund', class: 'fund', note: '', createdAt: 1, history: { [nowM]: { contributed: 0, value: 300 } } },
+        { id: 'x', name: 'Coin', class: 'crypto', note: '', createdAt: 1, history: { [nowM]: { contributed: 1000, value: 500 } } },
+      ],
+      debts: [{ id: 'card', name: 'Card', class: 'card', rate: 22, note: '', createdAt: 1, history: { [nowM]: { paid: 100, balance: 4000 } } }],
+    });
+    const out = buildSuggestions(st, 'investing');
+    const got = out.map((x) => x.id);
+    for (const id of ['inv-top-holding-big', 'inv-below-paid-in', 'inv-growth-split', 'inv-rhythm-gaps', 'inv-share-of-income', 'inv-thin-cushion', 'inv-costly-debt-card']) {
+      expect(got, id).toContain(id);
+    }
+    const text = out.map((x) => `${x.title} ${x.body}`).join(' ').toLowerCase();
+    expect(text).not.toMatch(/\byou should\b/);
+    expect(text).not.toMatch(/\brecommend(ed|s)?\b/);
+    expect(text).not.toMatch(/\b(buy|sell) (more|now)\b/);
   });
 });

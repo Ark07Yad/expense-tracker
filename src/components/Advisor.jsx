@@ -18,17 +18,11 @@ import { SECTIONS, liveSuggestions } from '../lib/insights';
 import { useFinance } from '../lib/useFinance';
 import { categoryById } from '../lib/data';
 import { formatPercent } from '../lib/calc';
+import SuggestionCard from './SuggestionCard';
 import {
-  Badge, Button, Card, Empty, Icon, IconButton, Money,
+  Button, Card, Empty, Icon, IconButton, Money,
   SectionTitle, Textarea, stagger,
 } from './ui';
-
-const TONE_LABEL = {
-  bad: 'Needs attention',
-  warn: 'Heads up',
-  info: 'Worth knowing',
-  good: 'Going well',
-};
 
 export default function Advisor({ section, setSection, onNavigate, toast }) {
   const { state, dispatch } = useStore();
@@ -154,43 +148,13 @@ export default function Advisor({ section, setSection, onNavigate, toast }) {
         ) : (
           <div className="grid md:grid-cols-2 gap-3">
             {shown.map((s, i) => (
-              <Card key={s.id} className="p-4 animate-rise" style={stagger(i)}>
-                <div className="flex items-start gap-3">
-                  <span
-                    className="size-9 rounded-xl grid place-items-center shrink-0"
-                    style={{
-                      background: `color-mix(in srgb, var(--tone-${s.tone}) 15%, transparent)`,
-                      color: `var(--tone-${s.tone})`,
-                    }}
-                  >
-                    <Icon name={s.icon} className="size-[17px]" />
-                  </span>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge tone={s.tone === 'bad' ? 'bad' : s.tone === 'warn' ? 'warn' : s.tone === 'good' ? 'good' : 'info'}>
-                        {TONE_LABEL[s.tone]}
-                      </Badge>
-                    </div>
-                    <h3 className="text-[14px] font-semibold leading-snug">{s.title}</h3>
-                    <p className="text-[12.5px] text-dim mt-1.5 leading-relaxed">{s.body}</p>
-
-                    {s.action && (
-                      <Button size="sm" variant="ghost" className="mt-3" onClick={() => onNavigate(s.action.to)}>
-                        {s.action.label}
-                        <Icon name="chevR" className="size-3.5" />
-                      </Button>
-                    )}
-                  </div>
-
-                  <IconButton
-                    name="x"
-                    label="Dismiss"
-                    className="size-7 shrink-0 -mt-1 -mr-1"
-                    onClick={() => dispatch({ type: 'dismiss', id: s.id })}
-                  />
-                </div>
-              </Card>
+              <SuggestionCard
+                key={s.id}
+                s={s}
+                index={i}
+                onAction={(action) => onNavigate(action.to)}
+                onDismiss={(id) => dispatch({ type: 'dismiss', id })}
+              />
             ))}
           </div>
         )}

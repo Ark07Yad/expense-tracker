@@ -23,13 +23,14 @@ import { ASSET_CLASSES, assetClassById } from '../lib/data';
 import { addMonthKeys, formatMoney, formatPercent, monthKey, monthLabel, todayKey } from '../lib/calc';
 import Goals from './Goals';
 import Debts, { DebtUpdateRows } from './Debts';
+import InvestTips from './InvestTips';
 import {
   Badge, Bar, Button, Card, CategoryDot, ConfirmButton, Empty, Field, Icon,
   IconButton, Input, Money, MoneyInput, SectionTitle, Select, Sheet, Stat,
   Textarea, stagger, tooltipStyle,
 } from './ui';
 
-export default function Investments({ toast }) {
+export default function Investments({ toast, onNavigate }) {
   const { state } = useStore();
   const inv = useInvestments(12);
   const debts = useDebts(12);
@@ -174,35 +175,18 @@ export default function Investments({ toast }) {
       {/* Goals sit above holdings: money you are building toward, then money
           you already hold. Both belong on this screen; neither belongs in the
           other's card. */}
+      <InvestTips
+        onUpdate={() => setUpdateOpen(true)}
+        onAdd={() => setAddOpen(true)}
+        onNavigate={onNavigate}
+      />
+
       <Goals toast={toast} />
 
       <Debts toast={toast} />
 
       {!inv.empty && (
         <>
-          {inv.staleAssets.length > 0 && (
-            <Card className="p-4 border-amber-400/25" style={{ background: 'color-mix(in srgb, var(--tone-warn) 8%, var(--surface))' }}>
-              <div className="flex items-start gap-3">
-                <span className="size-8 rounded-xl grid place-items-center shrink-0 text-warn"
-                      style={{ background: 'color-mix(in srgb, var(--tone-warn) 16%, transparent)' }}>
-                  <Icon name="clock" className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-medium">
-                    {inv.staleAssets.length} {inv.staleAssets.length === 1 ? 'holding needs' : 'holdings need'} a fresh value
-                  </div>
-                  <p className="text-[12px] text-dim mt-1 leading-relaxed">
-                    {inv.staleAssets.map((a) => a.name).join(', ')}. Their last known value is being carried forward,
-                    which quietly distorts the whole net-worth line.
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setUpdateOpen(true)}>
-                  Update
-                </Button>
-              </div>
-            </Card>
-          )}
-
           {/* ── Allocation ── */}
           <div className="grid lg:grid-cols-5 gap-4">
             <Card className="lg:col-span-2 p-5">

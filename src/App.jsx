@@ -198,7 +198,7 @@ export default function App() {
               {tab === 'home' && <Dashboard onNavigate={navigate} />}
               {tab === 'ledger' && <Ledger date={date} setDate={setDate} toast={toast} />}
               {tab === 'analytics' && <Analytics onNavigate={navigate} />}
-              {tab === 'invest' && <Investments toast={toast} />}
+              {tab === 'invest' && <Investments toast={toast} onNavigate={navigate} />}
               {tab === 'advisor' && (
                 <Advisor section={advisorSection} setSection={setAdvisorSection} onNavigate={navigate} toast={toast} />
               )}
