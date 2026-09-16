@@ -31,6 +31,8 @@ export default function SectionTips({
   intents = {},
   here = null,
   onNavigate,
+  onAskAi = null,
+  aiTopics = [],
   first = 4,
   quiet = 'Nothing to flag here right now.',
 }) {
@@ -75,6 +77,12 @@ export default function SectionTips({
         sub={boxSub}
         action={
           <div className="flex items-center gap-1.5">
+            {onAskAi && aiTopics.includes(active) && (
+              <Button size="sm" variant="ghost" onClick={() => onAskAi(active)}>
+                <Icon name="spark" className="size-3.5" />
+                Ask AI
+              </Button>
+            )}
             {hiddenCount > 0 && (
               <Button size="sm" variant="subtle" onClick={() => dispatch({ type: 'restoreDismissed' })}>
                 <Icon name="undo" className="size-3.5" />

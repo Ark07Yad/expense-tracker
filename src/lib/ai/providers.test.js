@@ -28,6 +28,12 @@ const advice = {
   actions: [{ title: 'Build a cushion', detail: 'Three months', priority: 'now' }],
   risks: [], assumptions: [],
 };
+const spendingAdvice = {
+  summary: 'Dining is the mover.',
+  caps: [{ category: 'Food & Dining', monthlyCap: 300, why: 'Just above habit' }],
+  actions: [{ title: 'Cap dining', detail: 'At 300', priority: 'soon' }],
+  risks: [], assumptions: [],
+};
 const summary = { currency: 'EUR', cashFlow: { typicalMonthlyIncome: 4000 } };
 const reply = (body, init = {}) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' }, ...init }));
 
@@ -52,9 +58,21 @@ describe('OpenAI-compatible providers', () => {
     const body = JSON.parse(init.body);
     expect(body.model).toBe('m');
     expect(body.messages.map((x) => x.role)).toEqual(['system', 'user']);
+    expect(body.messages[0].content).toMatch(/investment guidance/);
     expect(body.messages[1].content).toContain('All money is in EUR');
     expect(body).not.toHaveProperty('temperature');
     expect(out.advice.actions[0].title).toBe('Build a cushion');
+  });
+
+  it('asks the question the topic is about, and says which topic answered', async () => {
+    fetchMock.mockReturnValueOnce(reply({ choices: [{ message: { content: JSON.stringify(spendingAdvice) } }] }));
+    const out = await requestAdvice({ provider: providerById('groq'), key: 'k', model: 'm', summary, topic: 'spending' });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[0].content).toMatch(/guidance on someone's spending/);
+    expect(body.messages[1].content).toContain('"caps"');
+    expect(out.topic).toBe('spending');
+    expect(out.advice.rows).toEqual([{ label: 'Food & Dining', value: 300, why: 'Just above habit' }]);
   });
 
   it('send no key at all to a local model', async () => {
@@ -113,6 +131,7 @@ describe('Claude', () => {
     expect(params.betas).toEqual(['server-side-fallback-2026-07-01']);
     expect(params.fallbacks).toBe('default');
     expect(params.output_config.format.type).toBe('json_schema');
+    expect(params.output_config.format.schema.required).toContain('allocation');
     expect(params.system).toMatch(/General guidance only/);
     expect(out.advice.summary).toBe('Keep going.');
   });
@@ -122,6 +141,12 @@ describe('Claude', () => {
     await requestAdvice({ provider, key: 'k', model: 'claude-sonnet-5', summary });
     expect(sdkCalls.create).toHaveLength(1);
     expect(sdkCalls.create[0].params).not.toHaveProperty('fallbacks');
+  });
+
+  it('asks for the topic own schema', async () => {
+    nextResponse = () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(spendingAdvice) }] });
+    await requestAdvice({ provider, key: 'k', model: 'claude-sonnet-5', summary, topic: 'spending' });
+    expect(sdkCalls.create[0].params.output_config.format.schema.required).toContain('caps');
   });
 
   it('reports a refusal instead of reading empty content', async () => {

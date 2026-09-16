@@ -17,7 +17,8 @@ const fresh = () => ({
   keys: {},
   remember: false,
   answers: defaultAnswers(),
-  last: null,
+  /** The last answer per topic, so reopening shows what you already asked for. */
+  lastByTopic: {},
 });
 
 export function loadAiConfig() {
@@ -36,6 +37,8 @@ export function loadAiConfig() {
       ...base,
       ...stored,
       keys,
+      // An older version kept a single answer, which was always investing.
+      lastByTopic: stored.lastByTopic || (stored.last ? { investing: stored.last } : {}),
       remember: !!stored.remember,
       models: stored.models || {},
       answers: { ...base.answers, ...stored.answers },

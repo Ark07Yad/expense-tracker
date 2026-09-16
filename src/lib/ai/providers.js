@@ -13,7 +13,7 @@
  * the official Anthropic SDK, loaded only when someone actually picks it.
  */
 
-import { ADVICE_SCHEMA, SYSTEM_PROMPT, parseAdvice, userMessage } from './prompt';
+import { parseAdvice, schemaOf, systemPromptFor, userMessage } from './prompt';
 
 /*
  * Browsers are increasingly strict about a public website reaching a server on
@@ -215,14 +215,14 @@ function fromAnthropic(sdk, provider, e) {
 /** Models on which a declined request is re-run server-side on a fallback model. */
 const SERVER_FALLBACKS = new Set(['claude-opus-5', 'claude-fable-5-1']);
 
-async function askClaude({ provider, key, model, user, signal }) {
+async function askClaude({ provider, key, model, topic, user, signal }) {
   const { sdk, client } = await anthropic(key);
   const params = {
     model,
     max_tokens: 16000,
-    system: SYSTEM_PROMPT,
+    system: systemPromptFor(topic),
     messages: [{ role: 'user', content: user }],
-    output_config: { format: { type: 'json_schema', schema: ADVICE_SCHEMA } },
+    output_config: { format: { type: 'json_schema', schema: schemaOf(topic) } },
   };
 
   let res;
@@ -276,14 +276,14 @@ export async function listModels(provider, key, signal) {
   return provider.id === 'openrouter' ? [...models.filter((m) => m.free), ...models.filter((m) => !m.free)] : models;
 }
 
-export async function requestAdvice({ provider, key, model, summary, signal }) {
+export async function requestAdvice({ provider, key, model, summary, topic = 'investing', signal }) {
   if (!model) throw new AiError('model', 'Choose a model first.');
   if (provider.needsKey && !key) throw new AiError('auth', `${provider.label} needs an API key.`);
 
-  const user = userMessage(summary);
+  const user = userMessage(summary, topic);
   let raw;
   if (provider.kind === 'anthropic') {
-    raw = await askClaude({ provider, key, model, user, signal });
+    raw = await askClaude({ provider, key, model, topic, user, signal });
   } else {
     const json = await openAiRequest(provider, '/chat/completions', {
       key,
@@ -293,7 +293,7 @@ export async function requestAdvice({ provider, key, model, summary, signal }) {
       body: {
         model,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPromptFor(topic) },
           { role: 'user', content: user },
         ],
       },
@@ -306,5 +306,5 @@ export async function requestAdvice({ provider, key, model, summary, signal }) {
     }
   }
 
-  return { advice: parseAdvice(raw), model, provider: provider.id, at: Date.now() };
+  return { advice: parseAdvice(raw, topic), topic, model, provider: provider.id, at: Date.now() };
 }

@@ -13,10 +13,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
-import { AGE_BANDS, FOCUSES, HORIZONS, RISK_LEVELS, buildAdviceSummary } from '../lib/ai/summary';
-import { AdviceFormatError, DISCLAIMER, namesSpecificProducts } from '../lib/ai/prompt';
+import { AGE_BANDS, FOCUSES, HORIZONS, HOUSEHOLDS, QUESTIONS, RISK_LEVELS, TOPIC_META, buildAdviceSummary } from '../lib/ai/summary';
+import { AdviceFormatError, disclaimerFor, namesSpecificProducts } from '../lib/ai/prompt';
 import { AiError, PROVIDERS, listModels, providerById, requestAdvice } from '../lib/ai/providers';
 import { loadAiConfig, saveAiConfig } from '../lib/ai/config';
+import { formatMoney } from '../lib/calc';
 import { Badge, Button, Field, Icon, Input, Segmented, Select, Sheet } from './ui';
 
 const STEP_TITLES = {
@@ -30,10 +31,10 @@ const STEP_TITLES = {
 
 const PRIORITY_LABEL = { now: 'Now', soon: 'Soon', later: 'Later' };
 
-export default function AiAdvisor({ onClose }) {
+export default function AiAdvisor({ topic = 'investing', onClose }) {
   const { state } = useStore();
   const [config, setConfig] = useState(loadAiConfig);
-  const [step, setStep] = useState(() => (config.last?.advice ? 'result' : 'model'));
+  const [step, setStep] = useState(() => (config.lastByTopic?.[topic]?.advice ? 'result' : 'model'));
   const [models, setModels] = useState({ loading: false, items: [], error: null });
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState(null);
@@ -43,7 +44,10 @@ export default function AiAdvisor({ onClose }) {
   const provider = providerById(config.provider);
   const key = config.keys[provider.id] || '';
   const model = config.models[provider.id] || provider.defaultModel || '';
-  const summary = useMemo(() => buildAdviceSummary(state, config.answers), [state, config.answers]);
+  const cur = state.profile.currency;
+  const asked = QUESTIONS[topic] || QUESTIONS.investing;
+  const focuses = FOCUSES[topic] || FOCUSES.investing;
+  const summary = useMemo(() => buildAdviceSummary(state, config.answers, topic), [state, config.answers, topic]);
   const origin = typeof location !== 'undefined' ? location.origin : '';
 
   const update = (patch) =>
@@ -55,6 +59,7 @@ export default function AiAdvisor({ onClose }) {
   const setModel = (id) => update((c) => ({ models: { ...c.models, [c.provider]: id } }));
   const setKey = (value) => update((c) => ({ keys: { ...c.keys, [c.provider]: value.trim() } }));
   const setAnswer = (patch) => update((c) => ({ answers: { ...c.answers, ...patch } }));
+  const setFocus = (value) => update((c) => ({ answers: { ...c.answers, focus: { ...c.answers.focus, [topic]: value } } }));
 
   const loadModels = async () => {
     setModels({ loading: true, items: [], error: null });
@@ -84,8 +89,8 @@ export default function AiAdvisor({ onClose }) {
     setShowRaw(false);
     setStep('running');
     try {
-      const out = await requestAdvice({ provider, key, model, summary, signal: controller.signal });
-      update({ last: out });
+      const out = await requestAdvice({ provider, key, model, summary, topic, signal: controller.signal });
+      update((c) => ({ lastByTopic: { ...c.lastByTopic, [topic]: out } }));
       setStep('result');
     } catch (e) {
       if (e instanceof AiError && e.kind === 'aborted') {
@@ -100,7 +105,7 @@ export default function AiAdvisor({ onClose }) {
   };
 
   const canContinue = !!model && (!provider.needsKey || !!key);
-  const last = config.last;
+  const last = config.lastByTopic?.[topic];
   const lastProvider = last ? providerById(last.provider) : null;
 
   const footer = {
@@ -152,7 +157,13 @@ export default function AiAdvisor({ onClose }) {
   }[step];
 
   return (
-    <Sheet open onClose={onClose} title="Ask AI for investment guidance" subtitle={STEP_TITLES[step]} footer={footer}>
+    <Sheet
+      open
+      onClose={onClose}
+      title={`Ask AI about ${TOPIC_META[topic]?.label || 'investing'}`}
+      subtitle={STEP_TITLES[step]}
+      footer={footer}
+    >
       {step === 'model' && (
         <div className="space-y-5">
           <div role="group" aria-label="Provider" className="grid sm:grid-cols-2 gap-2">
@@ -253,25 +264,38 @@ export default function AiAdvisor({ onClose }) {
           <p className="text-[12.5px] text-dim leading-relaxed">
             Guidance depends on things your ledger cannot know. None of these is stored anywhere but this device.
           </p>
-          <Field label="Age">
-            <Select value={config.answers.ageBand} onChange={(e) => setAnswer({ ageBand: e.target.value })}>
-              {AGE_BANDS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </Select>
-          </Field>
-          <div>
-            <div className="text-[12px] font-medium text-dim mb-1.5">When might you need this money?</div>
-            <Segmented value={config.answers.horizon} onChange={(v) => setAnswer({ horizon: v })} options={HORIZONS} />
-          </div>
-          <div>
-            <div className="text-[12px] font-medium text-dim mb-1.5">How do you feel about risk?</div>
-            <Segmented value={config.answers.risk} onChange={(v) => setAnswer({ risk: v })} options={RISK_LEVELS} />
-            <p className="text-[11.5px] text-faint mt-1.5">
-              {RISK_LEVELS.find((r) => r.value === config.answers.risk)?.blurb}
-            </p>
-          </div>
+          {asked.includes('ageBand') && (
+            <Field label="Age">
+              <Select value={config.answers.ageBand} onChange={(e) => setAnswer({ ageBand: e.target.value })}>
+                {AGE_BANDS.map((a) => <option key={a} value={a}>{a}</option>)}
+              </Select>
+            </Field>
+          )}
+          {asked.includes('household') && (
+            <Field label="Who does this money support?">
+              <Select value={config.answers.household} onChange={(e) => setAnswer({ household: e.target.value })}>
+                {HOUSEHOLDS.map((h) => <option key={h} value={h}>{h}</option>)}
+              </Select>
+            </Field>
+          )}
+          {asked.includes('horizon') && (
+            <div>
+              <div className="text-[12px] font-medium text-dim mb-1.5">When might you need this money?</div>
+              <Segmented value={config.answers.horizon} onChange={(v) => setAnswer({ horizon: v })} options={HORIZONS} />
+            </div>
+          )}
+          {asked.includes('risk') && (
+            <div>
+              <div className="text-[12px] font-medium text-dim mb-1.5">How do you feel about risk?</div>
+              <Segmented value={config.answers.risk} onChange={(v) => setAnswer({ risk: v })} options={RISK_LEVELS} />
+              <p className="text-[11.5px] text-faint mt-1.5">
+                {RISK_LEVELS.find((r) => r.value === config.answers.risk)?.blurb}
+              </p>
+            </div>
+          )}
           <Field label="Main focus">
-            <Select value={config.answers.focus} onChange={(e) => setAnswer({ focus: e.target.value })}>
-              {FOCUSES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            <Select value={config.answers.focus[topic]} onChange={(e) => setFocus(e.target.value)}>
+              {focuses.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </Select>
           </Field>
           <Field label="Country or region" hint="Optional. Lets the guidance mention account types that exist where you live.">
@@ -280,6 +304,14 @@ export default function AiAdvisor({ onClose }) {
               maxLength={40}
               onChange={(e) => setAnswer({ region: e.target.value })}
               placeholder="e.g. India, Ireland"
+            />
+          </Field>
+          <Field label="Anything the numbers do not show?" hint="Optional. A job change, a move, a big bill coming.">
+            <Input
+              value={config.answers.note}
+              maxLength={200}
+              onChange={(e) => setAnswer({ note: e.target.value })}
+              placeholder="e.g. moving house in March"
             />
           </Field>
         </div>
@@ -340,14 +372,24 @@ export default function AiAdvisor({ onClose }) {
       )}
 
       {step === 'result' && last?.advice && (
-        <AdviceView advice={last.advice} meta={`${last.model} via ${lastProvider.label} · ${new Date(last.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`} />
+        <AdviceView
+          advice={last.advice}
+          topic={last.topic || 'investing'}
+          currency={cur}
+          meta={`${last.model} via ${lastProvider.label} · ${new Date(last.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`}
+        />
       )}
     </Sheet>
   );
 }
 
-function AdviceView({ advice, meta }) {
+function AdviceView({ advice, topic, currency, meta }) {
   const specific = namesSpecificProducts(advice);
+  const biggest = Math.max(...advice.rows.map((r) => r.value), 0);
+  const shown = (row) =>
+    advice.unit === 'percent' ? `${row.value}%` : formatMoney(row.value, currency);
+  const width = (row) =>
+    advice.unit === 'percent' ? Math.min(100, row.value) : biggest > 0 ? (row.value / biggest) * 100 : 0;
   const groups = ['now', 'soon', 'later']
     .map((p) => [p, advice.actions.filter((a) => a.priority === p)])
     .filter(([, list]) => list.length);
@@ -357,7 +399,7 @@ function AdviceView({ advice, meta }) {
       <div role="note" className="rounded-2xl p-3.5 text-[12px] leading-relaxed flex items-start gap-2.5"
            style={{ background: 'color-mix(in srgb, var(--tone-warn) 12%, transparent)' }}>
         <Icon name="shield" className="size-4 text-warn shrink-0 mt-0.5" />
-        <span>{DISCLAIMER}</span>
+        <span>{disclaimerFor(topic)}</span>
       </div>
 
       {specific && (
@@ -369,20 +411,20 @@ function AdviceView({ advice, meta }) {
 
       {advice.summary && <p className="text-[13.5px] leading-relaxed">{advice.summary}</p>}
 
-      {advice.allocation.length > 0 && (
+      {advice.rows.length > 0 && (
         <section>
-          <h3 className="text-[11px] uppercase tracking-wider text-faint mb-2">Suggested long-term mix</h3>
+          <h3 className="text-[11px] uppercase tracking-wider text-faint mb-2">{advice.rowsTitle}</h3>
           <div className="space-y-2.5">
-            {advice.allocation.map((a) => (
-              <div key={a.assetClass}>
+            {advice.rows.map((row) => (
+              <div key={row.label}>
                 <div className="flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="font-medium">{a.assetClass}</span>
-                  <span className="tabular text-dim">{a.targetPct}%</span>
+                  <span className="font-medium">{row.label}</span>
+                  <span className="tabular text-dim">{shown(row)}</span>
                 </div>
                 <div className="h-1.5 rounded-full mt-1 overflow-hidden" style={{ background: 'var(--border)' }}>
-                  <div className="h-full rounded-full bg-brand-400" style={{ width: `${Math.min(100, a.targetPct)}%` }} />
+                  <div className="h-full rounded-full bg-brand-400" style={{ width: `${width(row)}%` }} />
                 </div>
-                {a.why && <p className="text-[11.5px] text-faint mt-1 leading-relaxed">{a.why}</p>}
+                {row.why && <p className="text-[11.5px] text-faint mt-1 leading-relaxed">{row.why}</p>}
               </div>
             ))}
           </div>

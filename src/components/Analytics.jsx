@@ -8,13 +8,16 @@
  * because a number with nothing to compare it to is not information.
  */
 
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   Area, AreaChart, Bar as RBar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { useStore } from '../lib/store';
 import SectionTips from './SectionTips';
+
+/* Carries the AI provider code, so only when someone asks. */
+const AiAdvisor = lazy(() => import('./AiAdvisor'));
 import { monthlyBreakdown, useFinance } from '../lib/useFinance';
 import { PERIODS, addDays, dayLabel, formatMoney, formatPercent, parseKey, todayKey } from '../lib/calc';
 import { categoriesFor, categoryById } from '../lib/data';
@@ -35,6 +38,7 @@ export default function Analytics({ onNavigate }) {
   const [offset, setOffset] = useState(0);
   const [view, setView] = useState('flow');
   const [catFilter, setCatFilter] = useState('all');
+  const [aiTopic, setAiTopic] = useState(null);
   const f = useFinance(period, offset, catFilter === 'all' ? undefined : catFilter);
   const cur = state.profile.currency;
 
@@ -521,7 +525,15 @@ export default function Analytics({ onNavigate }) {
         hide={['empty']}
         here="analytics"
         onNavigate={onNavigate}
+        onAskAi={setAiTopic}
+        aiTopics={['spending', 'saving']}
       />
+
+      {aiTopic && (
+        <Suspense fallback={null}>
+          <AiAdvisor topic={aiTopic} onClose={() => setAiTopic(null)} />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,42 +1,87 @@
 import { describe, expect, it } from 'vitest';
-import { AdviceFormatError, DISCLAIMER, SYSTEM_PROMPT, namesSpecificProducts, parseAdvice, userMessage } from './prompt';
+import {
+  AdviceFormatError, DISCLAIMERS, ROW_SHAPE, SYSTEM_PROMPTS,
+  disclaimerFor, namesSpecificProducts, parseAdvice, schemaOf, userMessage,
+} from './prompt';
 
-const good = {
+const answer = (topic, rows) => JSON.stringify({
   summary: 'You keep 55% of income.',
-  allocation: [{ assetClass: 'Equity index funds', targetPct: 60, why: 'Long horizon' }, { assetClass: 'Bonds', targetPct: 40, why: 'Stability' }],
+  [ROW_SHAPE[topic].key]: rows,
   actions: [{ title: 'Clear the card', detail: '2,400 at 21.9%', priority: 'now' }],
   risks: ['Markets fall'],
   assumptions: ['Stable job'],
-};
+});
+
+const mix = [
+  { assetClass: 'Equity index funds', targetPct: 60, why: 'Long horizon' },
+  { assetClass: 'Bonds', targetPct: 40, why: 'Stability' },
+];
 
 describe('the instructions', () => {
-  it('keep guidance general and say so', () => {
-    expect(SYSTEM_PROMPT).toMatch(/Do not name specific funds/);
-    expect(SYSTEM_PROMPT).toMatch(/Never promise or estimate specific returns/);
-    expect(DISCLAIMER).toMatch(/subject to market risk/);
+  it('keep guidance general on every topic', () => {
+    for (const [topic, prompt] of Object.entries(SYSTEM_PROMPTS)) {
+      expect(prompt, topic).toMatch(/Do not name specific funds/);
+      expect(prompt, topic).toMatch(/Never promise or estimate specific returns/);
+    }
+  });
+
+  it('tell the spending one not to moralise, and the saving one what "kept" means', () => {
+    expect(SYSTEM_PROMPTS.spending).toMatch(/Never moralise/);
+    expect(SYSTEM_PROMPTS.spending).toMatch(/not discretionary/);
+    expect(SYSTEM_PROMPTS.saving).toMatch(/income minus spending/);
+  });
+
+  it('carry a disclaimer suited to the topic', () => {
+    expect(DISCLAIMERS.investing).toMatch(/subject to market risk/);
+    expect(DISCLAIMERS.spending).toMatch(/cannot know what a category was for/);
+    expect(DISCLAIMERS.saving).toMatch(/subject to market risk/);
+    expect(disclaimerFor('nonsense')).toBe(DISCLAIMERS.investing);
+  });
+
+  it('ask for the row shape that topic uses', () => {
+    expect(schemaOf('spending').required).toContain('caps');
+    expect(schemaOf('saving').properties.split.items.required).toEqual(['purpose', 'monthlyAmount', 'why']);
+    expect(userMessage({ currency: 'EUR' }, 'spending')).toContain('"caps"');
   });
 
   it('embed the summary and the currency', () => {
-    const msg = userMessage({ currency: 'EUR', cashFlow: { typicalMonthlyIncome: 4000 } });
+    const msg = userMessage({ currency: 'EUR', cashFlow: { typicalMonthlyIncome: 4000 } }, 'investing');
     expect(msg).toContain('All money is in EUR');
     expect(msg).toContain('"typicalMonthlyIncome": 4000');
   });
 });
 
 describe('parseAdvice', () => {
-  it('reads plain JSON', () => {
-    expect(parseAdvice(JSON.stringify(good))).toEqual(expect.objectContaining({ summary: good.summary, rescaled: false }));
+  it('reads plain JSON and keeps the topic', () => {
+    const out = parseAdvice(answer('investing', mix), 'investing');
+    expect(out).toEqual(expect.objectContaining({ topic: 'investing', unit: 'percent', rescaled: false }));
+    expect(out.rows[0]).toEqual({ label: 'Equity index funds', value: 60, why: 'Long horizon' });
+    expect(out.rowsTitle).toBe('Suggested long-term mix');
+  });
+
+  it('reads each topic out of its own key', () => {
+    const spending = parseAdvice(answer('spending', [{ category: 'Food & Dining', monthlyCap: 320.5, why: 'Above habit' }]), 'spending');
+    expect(spending.rows).toEqual([{ label: 'Food & Dining', value: 320.5, why: 'Above habit' }]);
+    expect(spending.unit).toBe('money');
+    expect(spending.rowsTitle).toBe('Suggested monthly caps');
+
+    const saving = parseAdvice(answer('saving', [{ purpose: 'Emergency cushion', monthlyAmount: 200, why: 'Two months short' }]), 'saving');
+    expect(saving.rows).toEqual([{ label: 'Emergency cushion', value: 200, why: 'Two months short' }]);
   });
 
   it('reads JSON wrapped in reasoning, prose and a code fence', () => {
-    const raw = `<think>let me add this up</think>Sure! Here you go:\n\`\`\`json\n${JSON.stringify(good)}\n\`\`\`\nHope that helps.`;
+    const raw = `<think>let me add up</think>Sure!\n\`\`\`json\n${answer('investing', mix)}\n\`\`\`\nHope that helps.`;
     expect(parseAdvice(raw).actions[0].title).toBe('Clear the card');
   });
 
-  it('rescales an allocation that does not add up', () => {
-    const out = parseAdvice(JSON.stringify({ ...good, allocation: [{ assetClass: 'A', targetPct: 90, why: '' }, { assetClass: 'B', targetPct: 60, why: '' }] }));
-    expect(out.allocation.map((a) => a.targetPct)).toEqual([60, 40]);
-    expect(out.rescaled).toBe(true);
+  it('rescales percentages that do not add up, and leaves money alone', () => {
+    const pct = parseAdvice(answer('investing', [{ assetClass: 'A', targetPct: 90, why: '' }, { assetClass: 'B', targetPct: 60, why: '' }]), 'investing');
+    expect(pct.rows.map((r) => r.value)).toEqual([60, 40]);
+    expect(pct.rescaled).toBe(true);
+
+    const money = parseAdvice(answer('spending', [{ category: 'A', monthlyCap: 900, why: '' }, { category: 'B', monthlyCap: 600, why: '' }]), 'spending');
+    expect(money.rows.map((r) => r.value)).toEqual([900, 600]);
+    expect(money.rescaled).toBe(false);
   });
 
   it('drops malformed items and defaults an unknown priority', () => {
@@ -46,7 +91,7 @@ describe('parseAdvice', () => {
       actions: [{ title: 'Do it', priority: 'yesterday' }, { detail: 'no title' }],
       risks: ['r', 3, null],
     }));
-    expect(out.allocation).toEqual([]);
+    expect(out.rows).toEqual([]);
     expect(out.actions).toEqual([{ title: 'Do it', detail: '', priority: 'soon' }]);
     expect(out.risks).toEqual(['r']);
   });
@@ -60,7 +105,9 @@ describe('parseAdvice', () => {
 });
 
 describe('namesSpecificProducts', () => {
-  const withText = (detail) => ({ ...good, actions: [{ title: 't', detail, priority: 'now' }] });
+  const withText = (detail) => parseAdvice(JSON.stringify({
+    summary: 's', allocation: [], actions: [{ title: 't', detail, priority: 'now' }], risks: [], assumptions: [],
+  }));
 
   it('flags tickers, exchange prefixes and ISINs', () => {
     expect(namesSpecificProducts(withText('Buy an S&P fund (VOO)'))).toBe(true);
@@ -70,7 +117,7 @@ describe('namesSpecificProducts', () => {
   });
 
   it('does not cry wolf on generic instrument and account types', () => {
-    expect(namesSpecificProducts(good)).toBe(false);
+    expect(namesSpecificProducts(parseAdvice(answer('investing', mix)))).toBe(false);
     expect(namesSpecificProducts(withText('A low-cost index fund (ETF), a monthly SIP, your PPF (PPF) and a pension (PRSA) in EUR (EUR)'))).toBe(false);
   });
 });

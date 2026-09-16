@@ -122,3 +122,43 @@ describe('one box, several sections', () => {
     expect(screen.queryByRole('button', { name: /restore/i })).toBeNull();
   });
 });
+
+describe('asking a model about the section on show', () => {
+  const sections = [
+    { value: 'spending', label: 'Spending suggestions' },
+    { value: 'income', label: 'Income suggestions' },
+    { value: 'saving', label: 'Savings suggestions' },
+  ];
+
+  it('offers Ask AI only for the topics that have one, and names the active section', async () => {
+    seed({ entries: [entry({ date: day(2), category: 'dining', amount: 500 })] });
+    const onAskAi = vi.fn();
+    const { user } = renderWithStore(
+      <SectionTips
+        section="spending"
+        sections={sections}
+        hide={['empty']}
+        here="analytics"
+        onAskAi={onAskAi}
+        aiTopics={['spending', 'saving']}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Ask AI/ }));
+    expect(onAskAi).toHaveBeenCalledWith('spending');
+
+    await user.click(screen.getByRole('tab', { name: 'Savings' }));
+    await user.click(screen.getByRole('button', { name: /Ask AI/ }));
+    expect(onAskAi).toHaveBeenLastCalledWith('saving');
+
+    // Nothing is offered for income: there is no topic for it.
+    await user.click(screen.getByRole('tab', { name: 'Income' }));
+    expect(screen.queryByRole('button', { name: /Ask AI/ })).toBeNull();
+  });
+
+  it('offers nothing when the screen cannot open the sheet', () => {
+    seed({});
+    renderWithStore(<SectionTips section="budgets" hide={['empty']} here="settings" />);
+    expect(screen.queryByRole('button', { name: /Ask AI/ })).toBeNull();
+  });
+});

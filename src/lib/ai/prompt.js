@@ -6,77 +6,143 @@
  * products to a specific person is regulated advice in most places, and a
  * disclaimer does not change that.
  *
+ * Three topics, because the same model is asked three different questions:
+ * investing (a long-term mix), spending (monthly caps), and saving (where the
+ * money you keep should go). Each has its own instructions, answer shape and
+ * disclaimer; everything after that — parsing, rendering, dismissing — is
+ * shared, so the answer is normalised into one row shape here.
+ *
  * The parser is deliberately forgiving. Free and local models wrap JSON in
  * prose, code fences or reasoning tags, and a strict parser would make most of
  * them unusable; what matters is that nothing reaches the page except fields
  * this module has checked, rendered as text.
  */
 
-export const DISCLAIMER =
-  'AI-generated general guidance, not personal advice from a registered investment adviser. ' +
-  'Investments are subject to market risk: values can fall as well as rise, and past performance ' +
-  'does not guarantee future returns. Read all product and scheme documents carefully, and consider ' +
-  'speaking to a qualified adviser before acting.';
-
-export const ADVICE_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['summary', 'allocation', 'actions', 'risks', 'assumptions'],
-  properties: {
-    summary: { type: 'string' },
-    allocation: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['assetClass', 'targetPct', 'why'],
-        properties: {
-          assetClass: { type: 'string' },
-          targetPct: { type: 'number' },
-          why: { type: 'string' },
-        },
-      },
-    },
-    actions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['title', 'detail', 'priority'],
-        properties: {
-          title: { type: 'string' },
-          detail: { type: 'string' },
-          priority: { type: 'string', enum: ['now', 'soon', 'later'] },
-        },
-      },
-    },
-    risks: { type: 'array', items: { type: 'string' } },
-    assumptions: { type: 'array', items: { type: 'string' } },
-  },
+export const DISCLAIMERS = {
+  investing:
+    'AI-generated general guidance, not personal advice from a registered investment adviser. ' +
+    'Investments are subject to market risk: values can fall as well as rise, and past performance ' +
+    'does not guarantee future returns. Read all product and scheme documents carefully, and consider ' +
+    'speaking to a qualified adviser before acting.',
+  spending:
+    'AI-generated general guidance, not personal financial advice. It reads only the figures you logged, ' +
+    'so it cannot know what a category was for or what is unavoidable in your life. Treat any suggested ' +
+    'cap as a starting point to adjust, not a rule.',
+  saving:
+    'AI-generated general guidance, not personal advice from a registered adviser. It reads only the figures ' +
+    'you logged. Anything invested rather than held as cash is subject to market risk — values can fall as ' +
+    'well as rise — and rates, tax rules and account types change.',
 };
 
-export const SYSTEM_PROMPT = `You give general, educational personal-finance and investment guidance based on a summary of one person's finances.
+export const disclaimerFor = (topic) => DISCLAIMERS[topic] || DISCLAIMERS.investing;
 
-Rules:
-- General guidance only. Do not name specific funds, ETFs, stocks, bonds, cryptocurrencies, tickers, fund houses, banks, brokers, apps or insurance products. Speak in asset classes and generic instrument types, for example "a low-cost, broadly diversified index fund", "government bonds", "fixed deposits", "a high-interest savings account".
-- Ground every point in the figures provided and quote them. If something needed is missing, say what and keep the guidance conditional.
-- Work in this order unless the figures clearly say otherwise: an emergency cushion of roughly 3–6 months of spending; high-interest debt; savings goals with deadlines; then long-term investing matched to the stated horizon and risk tolerance.
+/**
+ * How each topic's rows are named on the wire and on the page.
+ *
+ * `key` is the array the model returns, `label`/`value` its fields, and `unit`
+ * decides both the rendering and whether the numbers are expected to add to 100.
+ */
+export const ROW_SHAPE = {
+  investing: { key: 'allocation', label: 'assetClass', value: 'targetPct', unit: 'percent', title: 'Suggested long-term mix' },
+  spending: { key: 'caps', label: 'category', value: 'monthlyCap', unit: 'money', title: 'Suggested monthly caps' },
+  saving: { key: 'split', label: 'purpose', value: 'monthlyAmount', unit: 'money', title: 'Where each month\'s savings could go' },
+};
+
+const schemaFor = (topic) => {
+  const shape = ROW_SHAPE[topic];
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['summary', shape.key, 'actions', 'risks', 'assumptions'],
+    properties: {
+      summary: { type: 'string' },
+      [shape.key]: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: [shape.label, shape.value, 'why'],
+          properties: {
+            [shape.label]: { type: 'string' },
+            [shape.value]: { type: 'number' },
+            why: { type: 'string' },
+          },
+        },
+      },
+      actions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['title', 'detail', 'priority'],
+          properties: {
+            title: { type: 'string' },
+            detail: { type: 'string' },
+            priority: { type: 'string', enum: ['now', 'soon', 'later'] },
+          },
+        },
+      },
+      risks: { type: 'array', items: { type: 'string' } },
+      assumptions: { type: 'array', items: { type: 'string' } },
+    },
+  };
+};
+
+export const SCHEMAS = {
+  investing: schemaFor('investing'),
+  spending: schemaFor('spending'),
+  saving: schemaFor('saving'),
+};
+
+export const schemaOf = (topic) => SCHEMAS[topic] || SCHEMAS.investing;
+
+const SHARED_RULES = `- Ground every point in the figures provided and quote them. If something needed is missing, say what, and keep the guidance conditional.
 - Never promise or estimate specific returns, and do not state current prices, rates or market levels — you do not have live data.
-- If the country or region is given, you may mention general features that commonly exist there (such as tax-advantaged retirement accounts) in generic terms, noting that rules change and should be checked.
-- The allocation is a suggested long-term mix across asset classes that sums to 100. Use an empty list if investing is not yet appropriate, and explain why in the summary.
+- Do not name specific funds, ETFs, stocks, bonds, cryptocurrencies, tickers, fund houses, banks, brokers, apps or insurance products. Speak in generic types, for example "a low-cost, broadly diversified index fund", "a high-interest savings account", "fixed deposits".
+- If a country or region is given, you may mention general features that commonly exist there (such as tax-advantaged accounts) in generic terms, noting that rules change and should be checked.
 - 3 to 6 actions, each specific to these figures. priority is "now", "soon" or "later".
 - Plain text in every field: no markdown, no HTML.
+- Reply with only a JSON object matching the schema you are given.`;
 
-Reply with only a JSON object matching the schema you are given.`;
+export const SYSTEM_PROMPTS = {
+  investing: `You give general, educational personal-finance and investment guidance based on a summary of one person's finances.
 
-export function userMessage(summary) {
+Rules:
+- General guidance only. Work in asset classes and generic instrument types.
+- Work in this order unless the figures clearly say otherwise: an emergency cushion of roughly 3–6 months of spending; high-interest debt; savings goals with deadlines; then long-term investing matched to the stated horizon and risk tolerance.
+- "allocation" is a suggested long-term mix across asset classes whose percentages sum to 100. Use an empty list if investing is not yet appropriate, and say why in the summary.
+${SHARED_RULES}`,
+
+  spending: `You give general, educational guidance on someone's spending, based on a summary of what they logged.
+
+Rules:
+- Describe what the figures show before suggesting anything, and be specific: name the categories and the amounts.
+- Respect that much spending is not discretionary. Housing, debt repayments, utilities and insurance are usually fixed in the short term; say so rather than suggesting they simply be cut.
+- Never moralise, shame, or single out small pleasures as the problem when the large fixed costs dominate. A person who is fine overall should be told so.
+- "caps" is a short list of suggested monthly limits in their currency, for the few categories where a limit would actually change something. Each must be realistic against what they typically spend — a cap far below recent months is not a plan. Use an empty list if caps would not help, and say why.
+- Where a cap frees money, say what it frees per month and what it could go toward.
+${SHARED_RULES}`,
+
+  saving: `You give general, educational guidance on saving, based on a summary of someone's finances.
+
+Rules:
+- What they "keep" is income minus spending. Money kept is not automatically moved anywhere — say where it currently sits if that matters.
+- Work in this order unless the figures say otherwise: an emergency cushion of roughly 3–6 months of spending, held somewhere it can be reached without selling anything; then debts costing more than savings can earn; then goals with deadlines; then longer-term saving or investing.
+- "split" is a suggested division of what they keep each month, in their currency, by purpose (for example an emergency cushion, a named goal number from the summary, longer-term investing). The amounts should add up to roughly what they actually keep in a typical month, not more.
+- If they keep little or nothing, say that plainly and point at the spending side instead of inventing a split.
+${SHARED_RULES}`,
+};
+
+export const systemPromptFor = (topic) => SYSTEM_PROMPTS[topic] || SYSTEM_PROMPTS.investing;
+
+export function userMessage(summary, topic = 'investing') {
   return [
     `A summary of my finances. All money is in ${summary.currency}.`,
     '',
     JSON.stringify(summary, null, 2),
     '',
     'Reply with only a JSON object matching this JSON schema:',
-    JSON.stringify(ADVICE_SCHEMA),
+    JSON.stringify(schemaOf(topic)),
   ].join('\n');
 }
 
@@ -92,7 +158,9 @@ const PRIORITIES = ['now', 'soon', 'later'];
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 const texts = (v) => (Array.isArray(v) ? v.map(text).filter(Boolean) : []);
 
-export function parseAdvice(raw) {
+export function parseAdvice(raw, topic = 'investing') {
+  const shape = ROW_SHAPE[topic] || ROW_SHAPE.investing;
+
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new AdviceFormatError('The model returned an empty answer.', raw || '');
   }
@@ -115,17 +183,18 @@ export function parseAdvice(raw) {
     throw new AdviceFormatError('The model did not answer in the expected format.', raw);
   }
 
-  let allocation = Array.isArray(data?.allocation)
-    ? data.allocation
-        .map((x) => ({ assetClass: text(x?.assetClass), targetPct: Math.max(0, Number(x?.targetPct) || 0), why: text(x?.why) }))
-        .filter((x) => x.assetClass && x.targetPct > 0)
+  let rows = Array.isArray(data?.[shape.key])
+    ? data[shape.key]
+        .map((x) => ({ label: text(x?.[shape.label]), value: Math.max(0, Number(x?.[shape.value]) || 0), why: text(x?.why) }))
+        .filter((x) => x.label && x.value > 0)
     : [];
 
-  // Models are bad at adding up. Rescale rather than show a mix of 130%.
-  const total = allocation.reduce((s, x) => s + x.targetPct, 0);
-  const rescaled = total > 0 && Math.abs(total - 100) > 1;
-  if (rescaled) allocation = allocation.map((x) => ({ ...x, targetPct: (x.targetPct * 100) / total }));
-  allocation = allocation.map((x) => ({ ...x, targetPct: Math.round(x.targetPct) }));
+  // Percentages are meant to add to 100 and models are bad at adding up;
+  // amounts of money are not, so they are left alone.
+  const total = rows.reduce((s, x) => s + x.value, 0);
+  const rescaled = shape.unit === 'percent' && total > 0 && Math.abs(total - 100) > 1;
+  if (rescaled) rows = rows.map((x) => ({ ...x, value: (x.value * 100) / total }));
+  if (shape.unit === 'percent') rows = rows.map((x) => ({ ...x, value: Math.round(x.value) }));
 
   const actions = Array.isArray(data?.actions)
     ? data.actions
@@ -138,11 +207,21 @@ export function parseAdvice(raw) {
     : [];
 
   const summary = text(data?.summary);
-  if (!summary && !actions.length && !allocation.length) {
+  if (!summary && !actions.length && !rows.length) {
     throw new AdviceFormatError('The model answered, but without any guidance in it.', raw);
   }
 
-  return { summary, allocation, actions, risks: texts(data?.risks), assumptions: texts(data?.assumptions), rescaled };
+  return {
+    topic,
+    summary,
+    rows,
+    rowsTitle: shape.title,
+    unit: shape.unit,
+    actions,
+    risks: texts(data?.risks),
+    assumptions: texts(data?.assumptions),
+    rescaled,
+  };
 }
 
 /*
@@ -164,7 +243,7 @@ const GENERIC = new Set([
 export function namesSpecificProducts(advice) {
   const all = [
     advice?.summary,
-    ...(advice?.allocation || []).flatMap((x) => [x.assetClass, x.why]),
+    ...(advice?.rows || []).flatMap((x) => [x.label, x.why]),
     ...(advice?.actions || []).flatMap((x) => [x.title, x.detail]),
     ...(advice?.risks || []),
     ...(advice?.assumptions || []),
