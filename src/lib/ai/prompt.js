@@ -32,6 +32,15 @@ export const DISCLAIMERS = {
     'AI-generated general guidance, not personal advice from a registered adviser. It reads only the figures ' +
     'you logged. Anything invested rather than held as cash is subject to market risk — values can fall as ' +
     'well as rise — and rates, tax rules and account types change.',
+  budgets:
+    'AI-generated general guidance, not personal financial advice. It reads only the figures you logged, so it ' +
+    'cannot know which of your costs are fixed by contract or what a category was for. Treat any cap as a ' +
+    'starting point to adjust, not a rule.',
+  debt:
+    'AI-generated general guidance, not personal financial or debt advice. It reads only the figures you ' +
+    'logged and cannot see your loan agreements, fees or penalties. Keep paying at least the required minimum ' +
+    'on every debt, check the terms before changing anything, and if repayments are becoming unmanageable, ' +
+    'consider a free debt advice service in your country.',
 };
 
 export const disclaimerFor = (topic) => DISCLAIMERS[topic] || DISCLAIMERS.investing;
@@ -46,6 +55,8 @@ export const ROW_SHAPE = {
   investing: { key: 'allocation', label: 'assetClass', value: 'targetPct', unit: 'percent', title: 'Suggested long-term mix' },
   spending: { key: 'caps', label: 'category', value: 'monthlyCap', unit: 'money', title: 'Suggested monthly caps' },
   saving: { key: 'split', label: 'purpose', value: 'monthlyAmount', unit: 'money', title: 'Where each month\'s savings could go' },
+  budgets: { key: 'caps', label: 'category', value: 'monthlyCap', unit: 'money', title: 'Suggested budgets' },
+  debt: { key: 'plan', label: 'debt', value: 'monthlyAmount', unit: 'money', title: 'Suggested monthly payments' },
 };
 
 const schemaFor = (topic) => {
@@ -92,6 +103,8 @@ export const SCHEMAS = {
   investing: schemaFor('investing'),
   spending: schemaFor('spending'),
   saving: schemaFor('saving'),
+  budgets: schemaFor('budgets'),
+  debt: schemaFor('debt'),
 };
 
 export const schemaOf = (topic) => SCHEMAS[topic] || SCHEMAS.investing;
@@ -130,6 +143,26 @@ Rules:
 - Work in this order unless the figures say otherwise: an emergency cushion of roughly 3–6 months of spending, held somewhere it can be reached without selling anything; then debts costing more than savings can earn; then goals with deadlines; then longer-term saving or investing.
 - "split" is a suggested division of what they keep each month, in their currency, by purpose (for example an emergency cushion, a named goal number from the summary, longer-term investing). The amounts should add up to roughly what they actually keep in a typical month, not more.
 - If they keep little or nothing, say that plainly and point at the spending side instead of inventing a split.
+${SHARED_RULES}`,
+
+  budgets: `You give general, educational guidance on setting monthly budgets, based on a summary of what someone logged.
+
+Rules:
+- A budget only works if it is realistic. Compare every suggested cap with what they typically spend in that category and say plainly when a cap is a stretch rather than a description.
+- Caps plus their savings target must not exceed their income. If the caps they already have do, say so and say what has to give.
+- Fixed costs — housing, debt repayments, utilities, insurance — are not where a cap changes behaviour. Set those at what they actually cost, and put the discipline into the categories that vary.
+- Not every category needs a cap. Fewer, well-chosen caps beat a full set; leave a category out rather than inventing a number for it.
+- "caps" is the suggested monthly budget per category, in their currency, for the categories worth capping.
+${SHARED_RULES}`,
+
+  debt: `You give general, educational guidance on paying down debt, based on a summary of what someone owes.
+
+Rules:
+- Every debt must keep receiving at least its required minimum payment. A plan that starves one to clear another faster is not a plan; say so if the figures tempt it.
+- Explain the trade-off between paying the highest interest rate first (cheapest overall) and the smallest balance first (quicker visible progress), and say which the figures here favour and why.
+- Weigh clearing debt against keeping a small cash cushion, and against money going into investments. Say when building a cushion first is the safer order.
+- Do not name lenders, refinancing products, consolidation companies or balance-transfer offers. Generic types only, noting that fees, terms and penalties vary and must be checked before acting.
+- "plan" is the suggested monthly payment per debt, in their currency, using the debt types from the summary. The total must be affordable against what they typically keep each month.
 ${SHARED_RULES}`,
 };
 

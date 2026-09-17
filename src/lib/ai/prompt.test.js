@@ -31,6 +31,16 @@ describe('the instructions', () => {
     expect(SYSTEM_PROMPTS.saving).toMatch(/income minus spending/);
   });
 
+  it('hold the budget and debt rules that keep the advice safe', () => {
+    expect(SYSTEM_PROMPTS.budgets).toMatch(/must not exceed their income/);
+    expect(SYSTEM_PROMPTS.budgets).toMatch(/Not every category needs a cap/);
+    expect(SYSTEM_PROMPTS.debt).toMatch(/required minimum payment/);
+    expect(SYSTEM_PROMPTS.debt).toMatch(/highest interest rate first/);
+    expect(SYSTEM_PROMPTS.debt).toMatch(/Do not name lenders, refinancing products/);
+    expect(DISCLAIMERS.debt).toMatch(/free debt advice service/);
+    expect(DISCLAIMERS.budgets).toMatch(/fixed by contract/);
+  });
+
   it('carry a disclaimer suited to the topic', () => {
     expect(DISCLAIMERS.investing).toMatch(/subject to market risk/);
     expect(DISCLAIMERS.spending).toMatch(/cannot know what a category was for/);
@@ -40,8 +50,11 @@ describe('the instructions', () => {
 
   it('ask for the row shape that topic uses', () => {
     expect(schemaOf('spending').required).toContain('caps');
+    expect(schemaOf('budgets').required).toContain('caps');
     expect(schemaOf('saving').properties.split.items.required).toEqual(['purpose', 'monthlyAmount', 'why']);
+    expect(schemaOf('debt').properties.plan.items.required).toEqual(['debt', 'monthlyAmount', 'why']);
     expect(userMessage({ currency: 'EUR' }, 'spending')).toContain('"caps"');
+    expect(userMessage({ currency: 'EUR' }, 'debt')).toContain('"plan"');
   });
 
   it('embed the summary and the currency', () => {
@@ -67,6 +80,17 @@ describe('parseAdvice', () => {
 
     const saving = parseAdvice(answer('saving', [{ purpose: 'Emergency cushion', monthlyAmount: 200, why: 'Two months short' }]), 'saving');
     expect(saving.rows).toEqual([{ label: 'Emergency cushion', value: 200, why: 'Two months short' }]);
+  });
+
+  it('reads budgets and debt out of their own keys', () => {
+    const budgets = parseAdvice(answer('budgets', [{ category: 'Food & Dining', monthlyCap: 400, why: 'Just above habit' }]), 'budgets');
+    expect(budgets.rows).toEqual([{ label: 'Food & Dining', value: 400, why: 'Just above habit' }]);
+    expect(budgets.rowsTitle).toBe('Suggested budgets');
+
+    const debt = parseAdvice(answer('debt', [{ debt: 'Credit card', monthlyAmount: 250, why: 'Highest rate' }]), 'debt');
+    expect(debt.rows).toEqual([{ label: 'Credit card', value: 250, why: 'Highest rate' }]);
+    expect(debt.rowsTitle).toBe('Suggested monthly payments');
+    expect(debt.unit).toBe('money');
   });
 
   it('reads JSON wrapped in reasoning, prose and a code fence', () => {

@@ -61,6 +61,20 @@ export const FOCUSES = {
     { value: 'goal', label: 'Reach a goal on time' },
     { value: 'where', label: 'Decide where savings should sit' },
   ],
+  budgets: [
+    { value: 'not-sure', label: 'Not sure — look at everything' },
+    { value: 'first', label: 'Set my first budgets' },
+    { value: 'realistic', label: 'Make the ones I have realistic' },
+    { value: 'overspend', label: 'Stop blowing them mid-month' },
+    { value: 'free-up', label: 'Free up money for saving' },
+  ],
+  debt: [
+    { value: 'not-sure', label: 'Not sure — look at everything' },
+    { value: 'order', label: 'Decide what to clear first' },
+    { value: 'fastest', label: 'Clear it as fast as I can' },
+    { value: 'payments', label: 'Make the monthly payments manageable' },
+    { value: 'balance', label: 'Balance paying debt against saving' },
+  ],
 };
 
 /** Which questions each topic actually needs. Age and risk say nothing about groceries. */
@@ -68,12 +82,16 @@ export const QUESTIONS = {
   investing: ['ageBand', 'horizon', 'risk', 'focus', 'region', 'note'],
   spending: ['household', 'focus', 'region', 'note'],
   saving: ['horizon', 'household', 'focus', 'region', 'note'],
+  budgets: ['household', 'focus', 'region', 'note'],
+  debt: ['household', 'focus', 'region', 'note'],
 };
 
 export const TOPIC_META = {
   investing: { label: 'investing', question: 'What should I do with what I have?' },
   spending: { label: 'spending', question: 'Where is my money going, and what should change?' },
   saving: { label: 'saving', question: 'What should happen to what I keep?' },
+  budgets: { label: 'budgets', question: 'What should each month\'s limits be?' },
+  debt: { label: 'what you owe', question: 'What should I pay, and in what order?' },
 };
 
 export const TOPICS = Object.keys(TOPIC_META);
@@ -103,7 +121,9 @@ export function buildAdviceSummary(state, answers = defaultAnswers(), topic = 'i
     const f = financeFor(state, 'month', -i);
     if (f.totals.earning > 0 || f.totals.expense > 0) months.push({ key: addMonthKeys(monthKey(today), -i), f });
   }
-  const income = avg(months.map((m) => m.f.totals.earning));
+  const income0 = avg(months.map((m) => m.f.totals.earning));
+  /** The measured average; `budgetTotals` prefers the income the person declared. */
+  const income = income0;
   const spending = avg(months.map((m) => m.f.totals.expense));
   const current = financeFor(state, 'month', 0);
   const now = current.totals;
@@ -170,17 +190,23 @@ export function buildAdviceSummary(state, answers = defaultAnswers(), topic = 'i
     return summary;
   }
 
-  if (topic === 'spending') {
-    // Typical per category across the same finished months, so a suggested cap
-    // can be judged against habit rather than against one unusual month.
-    const typical = new Map();
+  // Typical per category across the finished months, so a cap can be judged
+  // against habit rather than against one unusual month.
+  const typicalByCategory = () => {
+    const out = new Map();
     for (const m of months) {
       for (const c of m.f.expenseCats) {
-        const row = typical.get(c.id) || { label: c.label, total: 0 };
+        const row = out.get(c.id) || { label: c.label, total: 0 };
         row.total += c.total;
-        typical.set(c.id, row);
+        out.set(c.id, row);
       }
     }
+    return out;
+  };
+  const perMonth = (map, id) => round((map.get(id)?.total || 0) / (months.length || 1));
+
+  if (topic === 'spending') {
+    const typical = typicalByCategory();
 
     summary.spendingThisMonth = {
       total: round(now.expense),
@@ -192,7 +218,7 @@ export function buildAdviceSummary(state, answers = defaultAnswers(), topic = 'i
         spent: round(c.total),
         sharePct: round(c.share),
         entries: c.count,
-        typicalMonth: round((typical.get(c.id)?.total || 0) / (months.length || 1)),
+        typicalMonth: perMonth(typical, c.id),
       })),
     };
     summary.budgets = current.budgets
@@ -204,16 +230,68 @@ export function buildAdviceSummary(state, answers = defaultAnswers(), topic = 'i
     }));
 
     const rules = (state.recurring || []).filter((r) => r.active !== false && r.kind === 'expense');
-    const perMonth = { weekly: 52 / 12, monthly: 1, yearly: 1 / 12 };
+    const MONTHLY_FACTOR = { weekly: 52 / 12, monthly: 1, yearly: 1 / 12 };
     summary.recurringCommitments = {
       count: rules.length,
-      monthlyTotal: round(rules.reduce((s, r) => s + (Number(r.amount) || 0) * (perMonth[r.frequency] ?? 1), 0)),
+      monthlyTotal: round(rules.reduce((s, r) => s + (Number(r.amount) || 0) * (MONTHLY_FACTOR[r.frequency] ?? 1), 0)),
     };
     summary.debts = debtRows(debts);
     return summary;
   }
 
   // Oldest first, so a trend reads left to right.
+  if (topic === 'budgets') {
+    const typical = typicalByCategory();
+    const capped = new Set(Object.keys(state.profile?.budgets || {}).filter((id) => state.profile.budgets[id] > 0));
+    const declaredIncome = round(state.profile?.monthlyIncome) || round(income0);
+    const capsTotal = current.budgets.filter((b) => b.cap > 0).reduce((s, b) => s + b.cap, 0);
+    const savingsTarget = (declaredIncome * (round(state.profile?.savingsTargetPct) || 0)) / 100;
+
+    summary.budgets = current.budgets
+      .filter((b) => b.cap > 0)
+      .map((b) => ({
+        category: b.label,
+        monthlyCap: round(b.cap),
+        spentThisMonth: round(b.spent),
+        typicalMonth: perMonth(typical, b.id),
+        status: b.status,
+      }));
+    summary.categoriesWithNoCap = [...typical.entries()]
+      .filter(([id]) => !capped.has(id))
+      .map(([id, row]) => ({ category: row.label, typicalMonth: perMonth(typical, id) }))
+      .filter((c) => c.typicalMonth > 0)
+      .sort((x, y) => y.typicalMonth - x.typicalMonth)
+      .slice(0, 10);
+    summary.budgetTotals = {
+      declaredMonthlyIncome: declaredIncome,
+      capsTotal: round(capsTotal),
+      savingsTargetAmount: round(savingsTarget),
+      unallocated: round(declaredIncome - capsTotal - savingsTarget),
+      typicalTotalSpending: round(spending),
+    };
+    summary.progressThroughMonthPct = round(current.progress * 100);
+    return summary;
+  }
+
+  if (topic === 'debt') {
+    summary.debts = debtRows(debts);
+    summary.debtTotals = debts.empty
+      ? { owed: 0 }
+      : {
+          owed: round(debts.owed),
+          paidThisMonth: round(debts.paidThisMonth),
+          interestThisMonth: round(debts.interestTotal?.amount || 0),
+          interestBasis: debts.interestTotal?.basis || 'none',
+        };
+    summary.cushion = {
+      savingsPot: round(Math.max(0, worth.pot)),
+      cashLikeHoldings: round(liquid),
+      monthsOfTypicalSpending: cushionMonths,
+    };
+    summary.investedTotal = round(worth.investments);
+    return summary;
+  }
+
   summary.keptByMonth = months
     .toReversed()
     .map((m) => ({

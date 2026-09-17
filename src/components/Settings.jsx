@@ -6,7 +6,7 @@
  * says so plainly rather than letting people find out the hard way.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, suggestBudgets } from '../lib/store';
 import { CURRENCIES, categoriesFor } from '../lib/data';
 import { buildDemo } from '../lib/demo';
@@ -15,6 +15,9 @@ import { formatBytes } from '../lib/attachments';
 import * as persist from '../lib/persist';
 import ImportSheet from './ImportSheet';
 import SectionTips from './SectionTips';
+
+/* Carries the AI provider code, so only when someone asks. */
+const AiAdvisor = lazy(() => import('./AiAdvisor'));
 import {
   Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money,
   MoneyInput, NumberInput, SectionTitle, Select, Sheet,
@@ -28,6 +31,7 @@ export default function Settings({ toast, onNavigate }) {
   const [files, setFiles] = useState(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
+  const [aiTopic, setAiTopic] = useState(null);
 
   useEffect(() => {
     persist.storageStatus().then(setStorage);
@@ -221,8 +225,16 @@ export default function Settings({ toast, onNavigate }) {
         intents={{ budgets: goToBudgets }}
         here="settings"
         onNavigate={onNavigate}
+        onAskAi={setAiTopic}
+        aiTopics={['budgets']}
         quiet="Every cap looks sensible for this month so far."
       />
+
+      {aiTopic && (
+        <Suspense fallback={null}>
+          <AiAdvisor topic={aiTopic} onClose={() => setAiTopic(null)} />
+        </Suspense>
+      )}
 
       {/* ── Budgets ── */}
       <Card className="p-5" id="budgets">

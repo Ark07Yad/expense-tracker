@@ -14,6 +14,9 @@ import { useDebts } from '../lib/useFinance';
 
 /* Charts only, and only when a schedule is actually opened. */
 const PayoffSheet = lazy(() => import('./PayoffSheet'));
+
+/* Carries the AI provider code, so only when someone asks. */
+const AiAdvisor = lazy(() => import('./AiAdvisor'));
 import { DEBT_CLASSES, debtClassById } from '../lib/data';
 import { formatMoney, formatPercent, monthLabel } from '../lib/calc';
 import {
@@ -28,6 +31,7 @@ export default function Debts({ toast }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [payoffFor, setPayoffFor] = useState(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const openNew = () => {
     setEditing(null);
@@ -53,10 +57,18 @@ export default function Debts({ toast }) {
                 : '')
         }
         action={
-          <Button size="sm" variant="ghost" onClick={openNew}>
-            <Icon name="plus" className="size-3.5" />
-            Add debt
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {!debts.empty && (
+              <Button size="sm" variant="ghost" onClick={() => setAiOpen(true)}>
+                <Icon name="spark" className="size-3.5" />
+                Ask AI
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={openNew}>
+              <Icon name="plus" className="size-3.5" />
+              Add debt
+            </Button>
+          </div>
         }
       >
         What you owe
@@ -162,6 +174,12 @@ export default function Debts({ toast }) {
             );
           })}
         </div>
+      )}
+
+      {aiOpen && (
+        <Suspense fallback={null}>
+          <AiAdvisor topic="debt" onClose={() => setAiOpen(false)} />
+        </Suspense>
       )}
 
       {payoffFor && (

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildAdviceSummary, defaultAnswers } from './summary';
+import { TOPICS, buildAdviceSummary, defaultAnswers } from './summary';
 import { addMonthKeys, monthKey, todayKey } from '../calc';
 
 const nowM = monthKey(todayKey());
@@ -43,7 +43,7 @@ describe('buildAdviceSummary', () => {
   ];
 
   it('carries no names, titles, notes or account details, whatever the topic', () => {
-    for (const topic of ['investing', 'spending', 'saving']) {
+    for (const topic of TOPICS) {
       const dump = JSON.stringify(buildAdviceSummary(secretState(), answers, topic));
       for (const secret of SECRETS) {
         expect(dump, `${topic} leaked "${secret}"`).not.toContain(secret);
@@ -106,6 +106,35 @@ describe('buildAdviceSummary', () => {
     expect(s.cushion).toEqual(expect.objectContaining({ savingsPot: 3000, cashLikeHoldings: 2000 }));
     expect(s.goals[0].goal).toBe('Goal 1');
     expect(s).not.toHaveProperty('spendingThisMonth');
+  });
+
+  it('describes budgets against what is typical, and what has no cap at all', () => {
+    const st = secretState();
+    st.profile.budgets = { dining: 400 };
+    st.entries.push(entry(thisMonth(3), 'expense', 'dining', 250, 'Lunch with Ravi'));
+    const s = buildAdviceSummary(st, answers, 'budgets');
+
+    expect(s.budgets).toEqual([
+      expect.objectContaining({ category: 'Food & Dining', monthlyCap: 400, spentThisMonth: 250, typicalMonth: 300 }),
+    ]);
+    // Rent has no cap and is the biggest habit, so it leads the uncapped list.
+    expect(s.categoriesWithNoCap[0]).toEqual({ category: 'Rent & Housing', typicalMonth: 1500 });
+    expect(s.budgetTotals).toEqual(expect.objectContaining({
+      declaredMonthlyIncome: 4000, capsTotal: 400, savingsTargetAmount: 800, unallocated: 2800,
+    }));
+    expect(s.progressThroughMonthPct).toBeGreaterThan(0);
+    expect(s).not.toHaveProperty('holdingsByAssetClass');
+  });
+
+  it('describes debts with what they cost and what could clear them', () => {
+    const s = buildAdviceSummary(secretState(), answers, 'debt');
+    expect(s.debts).toEqual([
+      expect.objectContaining({ type: 'Credit card', balance: 2400, annualInterestPct: 21.9, typicalMonthlyPayment: 150 }),
+    ]);
+    expect(s.debtTotals).toEqual(expect.objectContaining({ owed: 2400, paidThisMonth: 150 }));
+    expect(s.cushion).toEqual(expect.objectContaining({ savingsPot: 3000, cashLikeHoldings: 2000 }));
+    expect(s.investedTotal).toBe(12000);
+    expect(s).not.toHaveProperty('keptByMonth');
   });
 
   it('refuses answers outside the offered options, and caps the free text', () => {
