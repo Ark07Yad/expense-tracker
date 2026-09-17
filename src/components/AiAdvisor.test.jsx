@@ -119,6 +119,33 @@ describe('AiAdvisor', () => {
     expect(screen.getByRole('note')).toHaveTextContent(/cannot know what a category was for/);
   });
 
+  it('shows the answer arriving, rather than a minute of spinner', async () => {
+    seed({});
+    let release;
+    providers.requestAdvice.mockImplementation(async ({ onChunk }) => {
+      onChunk('{"summary": "You keep about half of');
+      onChunk('{"summary": "You keep about half of what you earn", "actions": [{"title": "t", "detail": "d", "priority": "now"');
+      await new Promise((r) => { release = r; });
+      return answered(investingAdvice, 'investing');
+    });
+
+    const { user } = renderWithStore(<AiAdvisor onClose={() => {}} />);
+    await pickProvider(user, /Ollama/);
+    await user.type(screen.getByPlaceholderText('e.g. llama3.2'), 'tiny');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /Send to Ollama/ }));
+
+    // Mid-flight: the summary so far, and a count of what has landed.
+    expect(await screen.findByText(/You keep about half of what you earn/)).toBeInTheDocument();
+    expect(screen.getByText('1 action so far')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText('Build a three-month cushion')).toBeInTheDocument();
+  });
+
   it('keeps a key for the session only, unless asked to remember it', async () => {
     seed({});
     const { user } = renderWithStore(<AiAdvisor onClose={() => {}} />);

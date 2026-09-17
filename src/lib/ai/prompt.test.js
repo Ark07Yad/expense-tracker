@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AdviceFormatError, DISCLAIMERS, ROW_SHAPE, SYSTEM_PROMPTS,
-  disclaimerFor, namesSpecificProducts, parseAdvice, schemaOf, userMessage,
+  disclaimerFor, namesSpecificProducts, parseAdvice, previewFromPartial, schemaOf, userMessage,
 } from './prompt';
 
 const answer = (topic, rows) => JSON.stringify({
@@ -143,5 +143,29 @@ describe('namesSpecificProducts', () => {
   it('does not cry wolf on generic instrument and account types', () => {
     expect(namesSpecificProducts(parseAdvice(answer('investing', mix)))).toBe(false);
     expect(namesSpecificProducts(withText('A low-cost index fund (ETF), a monthly SIP, your PPF (PPF) and a pension (PRSA) in EUR (EUR)'))).toBe(false);
+  });
+});
+
+describe('previewFromPartial', () => {
+  const partial = '{"summary": "You keep 55% of what you earn, whic';
+
+  it('shows the summary as it is still being typed', () => {
+    expect(previewFromPartial(partial).summary).toBe('You keep 55% of what you earn, whic');
+    expect(previewFromPartial('{"summ').summary).toBe('');
+    expect(previewFromPartial('').summary).toBe('');
+  });
+
+  it('survives escapes, including a half-written one', () => {
+    expect(previewFromPartial('{"summary": "A \\"tight\\" month,\\nso far').summary).toBe('A "tight" month,\nso far');
+    expect(previewFromPartial('{"summary": "ends on a backslash \\').summary).toBe('ends on a backslash');
+  });
+
+  it('counts the suggestions that have landed', () => {
+    const half = '{"summary": "x", "caps": [{"category": "A", "monthlyCap": 1, "why": "b"}], "actions": [{"title": "t", "detail": "d", "priority": "now"}, {"title": "u"';
+    expect(previewFromPartial(half)).toEqual({ summary: 'x', rows: 1, actions: 1 });
+  });
+
+  it('ignores a reasoning preamble', () => {
+    expect(previewFromPartial('<think>hmm, their rent is high</think>{"summary": "Rent leads').summary).toBe('Rent leads');
   });
 });

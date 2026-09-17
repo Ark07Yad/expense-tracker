@@ -12,10 +12,26 @@ vi.mock('@anthropic-ai/sdk', () => {
   class BadRequestError extends APIError {}
   class APIConnectionError extends APIError {}
   class APIUserAbortError extends APIError {}
+  /** A stream that replays the canned answer as text deltas, then settles. */
+  const fakeStream = (record) => (params, options) => {
+    record.push({ params, options });
+    const message = nextResponse();
+    const text = (message.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+    return {
+      async *[Symbol.asyncIterator]() {
+        for (let i = 0; i < text.length; i += 25) {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: text.slice(i, i + 25) } };
+        }
+      },
+      finalMessage: async () => message,
+    };
+  };
+
   function Anthropic(opts) {
     this.opts = opts;
-    this.messages = { create: async (params, options) => { sdkCalls.create.push({ params, options, opts }); return nextResponse(); } };
-    this.beta = { messages: { create: async (params, options) => { sdkCalls.beta.push({ params, options, opts }); return nextResponse(); } } };
+    const withOpts = (record) => (params, options) => fakeStream(record)({ ...params }, { ...options, opts });
+    this.messages = { stream: withOpts(sdkCalls.create) };
+    this.beta = { messages: { stream: withOpts(sdkCalls.beta) } };
   }
   return { default: Anthropic, APIError, AuthenticationError, PermissionDeniedError, RateLimitError, NotFoundError, BadRequestError, APIConnectionError, APIUserAbortError };
 });
@@ -36,6 +52,21 @@ const spendingAdvice = {
 };
 const summary = { currency: 'EUR', cashFlow: { typicalMonthlyIncome: 4000 } };
 const reply = (body, init = {}) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' }, ...init }));
+
+/** An OpenAI-style event stream, delivered in small pieces. */
+const streamed = (text, { size = 30 } = {}) => {
+  const body = new ReadableStream({
+    start(controller) {
+      const encode = new TextEncoder();
+      for (let i = 0; i < text.length; i += size) {
+        controller.enqueue(encode.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text.slice(i, i + size) } }] })}\n\n`));
+      }
+      controller.enqueue(encode.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+};
 
 let fetchMock;
 beforeEach(() => {
@@ -118,6 +149,53 @@ describe('OpenAI-compatible providers', () => {
   });
 });
 
+describe('streaming', () => {
+  const provider = providerById('openrouter');
+
+  it('asks for a stream, and reports the text as it arrives', async () => {
+    const text = JSON.stringify(advice);
+    fetchMock.mockReturnValueOnce(streamed(text));
+    const seen = [];
+
+    const out = await requestAdvice({ provider, key: 'k', model: 'm', summary, onChunk: (sofar) => seen.push(sofar) });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).stream).toBe(true);
+    expect(seen.length).toBeGreaterThan(1);
+    // Each call carries everything so far, ending with the whole answer.
+    expect(seen[0].length).toBeLessThan(seen.at(-1).length);
+    expect(seen.at(-1)).toBe(text);
+    expect(out.advice.summary).toBe('Keep going.');
+  });
+
+  it('reads an answer split mid-token across chunks', async () => {
+    fetchMock.mockReturnValueOnce(streamed(JSON.stringify(advice), { size: 3 }));
+    const out = await requestAdvice({ provider, key: 'k', model: 'm', summary });
+    expect(out.advice.actions[0].title).toBe('Build a cushion');
+  });
+
+  it('falls back to a plain response when a provider ignores the stream flag', async () => {
+    fetchMock.mockReturnValueOnce(reply({ choices: [{ message: { content: JSON.stringify(advice) } }] }));
+    const out = await requestAdvice({ provider, key: 'k', model: 'm', summary, onChunk: () => {} });
+    expect(out.advice.summary).toBe('Keep going.');
+  });
+
+  it('reports an error sent inside the stream', async () => {
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: { message: 'upstream exploded', code: 502 } })}\n\n`));
+        controller.close();
+      },
+    });
+    fetchMock.mockReturnValueOnce(Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })));
+    await expect(requestAdvice({ provider, key: 'k', model: 'm', summary })).rejects.toMatchObject({ kind: 'http', message: expect.stringContaining('upstream exploded') });
+  });
+
+  it('still maps a failed request, stream or not', async () => {
+    fetchMock.mockReturnValueOnce(reply({ error: { message: 'bad key' } }, { status: 401 }));
+    await expect(requestAdvice({ provider, key: 'k', model: 'm', summary })).rejects.toMatchObject({ kind: 'auth' });
+  });
+});
+
 describe('Claude', () => {
   const provider = providerById('anthropic');
   const ok = () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(advice) }] });
@@ -126,8 +204,8 @@ describe('Claude', () => {
     nextResponse = ok;
     const out = await requestAdvice({ provider, key: 'sk-ant-1', model: 'claude-opus-5', summary });
     expect(sdkCalls.beta).toHaveLength(1);
-    const { params, opts } = sdkCalls.beta[0];
-    expect(opts).toEqual(expect.objectContaining({ apiKey: 'sk-ant-1', dangerouslyAllowBrowser: true }));
+    const { params, options } = sdkCalls.beta[0];
+    expect(options.opts).toEqual(expect.objectContaining({ apiKey: 'sk-ant-1', dangerouslyAllowBrowser: true }));
     expect(params.betas).toEqual(['server-side-fallback-2026-07-01']);
     expect(params.fallbacks).toBe('default');
     expect(params.output_config.format.type).toBe('json_schema');
@@ -147,6 +225,14 @@ describe('Claude', () => {
     nextResponse = () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(spendingAdvice) }] });
     await requestAdvice({ provider, key: 'k', model: 'claude-sonnet-5', summary, topic: 'spending' });
     expect(sdkCalls.create[0].params.output_config.format.schema.required).toContain('caps');
+  });
+
+  it('hands back Claude text as it arrives', async () => {
+    nextResponse = ok;
+    const seen = [];
+    await requestAdvice({ provider, key: 'k', model: 'claude-sonnet-5', summary, onChunk: (sofar) => seen.push(sofar) });
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.at(-1)).toBe(JSON.stringify(advice));
   });
 
   it('reports a refusal instead of reading empty content', async () => {

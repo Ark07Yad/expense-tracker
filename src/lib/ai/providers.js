@@ -15,6 +15,16 @@
 
 import { parseAdvice, schemaOf, systemPromptFor, userMessage } from './prompt';
 
+/**
+ * Streaming exists for one reason: free and local models can take a minute,
+ * and a spinner that long looks broken. The text is handed back as it arrives
+ * and the sheet shows the readable parts of it.
+ *
+ * Every provider is asked to stream, but none is required to: a provider that
+ * ignores the flag and answers with ordinary JSON is handled by the same code
+ * path, because several of them do exactly that.
+ */
+
 /*
  * Browsers are increasingly strict about a public website reaching a server on
  * the visitor's own machine: Chrome asks for "local network access", and some
@@ -160,7 +170,60 @@ function networkError(provider) {
   );
 }
 
-async function openAiRequest(provider, path, { key, body, signal }) {
+/**
+ * Read an OpenAI-style event stream.
+ *
+ * Deltas arrive split at arbitrary byte boundaries, so the tail of a chunk is
+ * kept until the blank line that terminates an event shows up. Errors can also
+ * arrive *inside* a 200 response, which is why this returns them rather than
+ * assuming a stream is a success.
+ */
+async function readEventStream(res, onChunk) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop() ?? '';
+
+    for (const event of events) {
+      for (const line of event.split(/\r?\n/)) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+
+        let json;
+        try {
+          json = JSON.parse(payload);
+        } catch {
+          continue; // a keep-alive or a comment line
+        }
+        if (json.error) return { text, error: json.error };
+
+        const delta = json.choices?.[0]?.delta ?? {};
+        const piece = typeof delta.content === 'string'
+          ? delta.content
+          : Array.isArray(delta.content)
+          ? delta.content.map((p) => p?.text || '').join('')
+          : '';
+        if (piece) {
+          text += piece;
+          onChunk?.(text);
+        }
+      }
+    }
+  }
+
+  return { text, error: null };
+}
+
+async function openAiRequest(provider, path, { key, body, signal, onChunk }) {
   const headers = {};
   if (key) headers.Authorization = `Bearer ${key}`;
   if (body) headers['Content-Type'] = 'application/json';
@@ -176,6 +239,20 @@ async function openAiRequest(provider, path, { key, body, signal }) {
   } catch (e) {
     if (e?.name === 'AbortError') throw new AiError('aborted', 'Cancelled.');
     throw networkError(provider);
+  }
+
+  if (res.ok && body?.stream && res.body && (res.headers.get('content-type') || '').includes('text/event-stream')) {
+    let streamed;
+    try {
+      streamed = await readEventStream(res, onChunk);
+    } catch (e) {
+      if (e?.name === 'AbortError') throw new AiError('aborted', 'Cancelled.');
+      throw networkError(provider);
+    }
+    if (streamed.error) {
+      throw httpError(provider, Number(streamed.error.code) || 502, streamed.error.message || '');
+    }
+    return { streamedText: streamed.text };
   }
 
   let json = null;
@@ -215,7 +292,7 @@ function fromAnthropic(sdk, provider, e) {
 /** Models on which a declined request is re-run server-side on a fallback model. */
 const SERVER_FALLBACKS = new Set(['claude-opus-5', 'claude-fable-5-1']);
 
-async function askClaude({ provider, key, model, topic, user, signal }) {
+async function askClaude({ provider, key, model, topic, user, signal, onChunk }) {
   const { sdk, client } = await anthropic(key);
   const params = {
     model,
@@ -227,12 +304,28 @@ async function askClaude({ provider, key, model, topic, user, signal }) {
 
   let res;
   try {
-    res = SERVER_FALLBACKS.has(model)
-      ? await client.beta.messages.create(
+    /*
+     * Streamed even when nobody is watching the text: `finalMessage()` waits
+     * for the whole answer either way, and a long non-streaming request risks
+     * the SDK's own HTTP timeout.
+     */
+    const stream = SERVER_FALLBACKS.has(model)
+      ? client.beta.messages.stream(
           { ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' },
           { signal }
         )
-      : await client.messages.create(params, { signal });
+      : client.messages.stream(params, { signal });
+
+    if (onChunk) {
+      let text = '';
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          text += event.delta.text;
+          onChunk(text);
+        }
+      }
+    }
+    res = await stream.finalMessage();
   } catch (e) {
     throw fromAnthropic(sdk, provider, e);
   }
@@ -276,28 +369,38 @@ export async function listModels(provider, key, signal) {
   return provider.id === 'openrouter' ? [...models.filter((m) => m.free), ...models.filter((m) => !m.free)] : models;
 }
 
-export async function requestAdvice({ provider, key, model, summary, topic = 'investing', signal }) {
+export async function requestAdvice({ provider, key, model, summary, topic = 'investing', signal, onChunk }) {
   if (!model) throw new AiError('model', 'Choose a model first.');
   if (provider.needsKey && !key) throw new AiError('auth', `${provider.label} needs an API key.`);
 
   const user = userMessage(summary, topic);
   let raw;
   if (provider.kind === 'anthropic') {
-    raw = await askClaude({ provider, key, model, topic, user, signal });
+    raw = await askClaude({ provider, key, model, topic, user, signal, onChunk });
   } else {
     const json = await openAiRequest(provider, '/chat/completions', {
       key,
       signal,
+      onChunk,
       // No temperature or token limit: several current models reject one or
       // the other, and the defaults are fine for a single answer.
       body: {
         model,
+        stream: true,
         messages: [
           { role: 'system', content: systemPromptFor(topic) },
           { role: 'user', content: user },
         ],
       },
     });
+
+    if (typeof json?.streamedText === 'string') {
+      if (!json.streamedText.trim()) {
+        throw new AiError('empty', `${provider.label} sent an empty answer.`, 'Try again, or pick another model.');
+      }
+      return { advice: parseAdvice(json.streamedText, topic), topic, model, provider: provider.id, at: Date.now() };
+    }
+
     const choice = json?.choices?.[0];
     const content = choice?.message?.content;
     raw = typeof content === 'string' ? content : Array.isArray(content) ? content.map((p) => p?.text || '').join('') : '';

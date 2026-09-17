@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { AGE_BANDS, FOCUSES, HORIZONS, HOUSEHOLDS, QUESTIONS, RISK_LEVELS, TOPIC_META, buildAdviceSummary } from '../lib/ai/summary';
-import { AdviceFormatError, disclaimerFor, namesSpecificProducts } from '../lib/ai/prompt';
+import { AdviceFormatError, disclaimerFor, namesSpecificProducts, previewFromPartial } from '../lib/ai/prompt';
 import { AiError, PROVIDERS, listModels, providerById, requestAdvice } from '../lib/ai/providers';
 import { loadAiConfig, saveAiConfig } from '../lib/ai/config';
 import { formatMoney } from '../lib/calc';
@@ -39,6 +39,8 @@ export default function AiAdvisor({ topic = 'investing', onClose }) {
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
+  /** What has arrived so far, while the answer is still streaming in. */
+  const [partial, setPartial] = useState('');
   const abortRef = useRef(null);
 
   const provider = providerById(config.provider);
@@ -87,9 +89,14 @@ export default function AiAdvisor({ topic = 'investing', onClose }) {
     abortRef.current = controller;
     setError(null);
     setShowRaw(false);
+    setPartial('');
     setStep('running');
     try {
-      const out = await requestAdvice({ provider, key, model, summary, topic, signal: controller.signal });
+      const out = await requestAdvice({
+        provider, key, model, summary, topic,
+        signal: controller.signal,
+        onChunk: setPartial,
+      });
       update((c) => ({ lastByTopic: { ...c.lastByTopic, [topic]: out } }));
       setStep('result');
     } catch (e) {
@@ -337,13 +344,7 @@ export default function AiAdvisor({ topic = 'investing', onClose }) {
         </div>
       )}
 
-      {step === 'running' && (
-        <div className="py-12 text-center" role="status">
-          <div className="mx-auto size-10 rounded-full border-2 border-brand-400/30 border-t-brand-400 animate-spin" />
-          <p className="text-[13px] text-dim mt-4">Asking {model} via {provider.label}…</p>
-          <p className="text-[11.5px] text-faint mt-1">Free and local models can take a minute.</p>
-        </div>
-      )}
+      {step === 'running' && <Waiting model={model} provider={provider} partial={partial} />}
 
       {step === 'error' && error && (
         <div className="space-y-3">
@@ -380,6 +381,43 @@ export default function AiAdvisor({ topic = 'investing', onClose }) {
         />
       )}
     </Sheet>
+  );
+}
+
+/**
+ * The wait.
+ *
+ * The answer arrives as JSON, which is not worth showing anyone, so this shows
+ * the human parts of it as they land: the summary being typed, then a count of
+ * suggestions. Until the first text arrives it is an ordinary spinner.
+ */
+function Waiting({ model, provider, partial }) {
+  const seen = previewFromPartial(partial);
+  const counted = [
+    seen.rows ? `${seen.rows} ${seen.rows === 1 ? 'suggestion' : 'suggestions'}` : '',
+    seen.actions ? `${seen.actions} ${seen.actions === 1 ? 'action' : 'actions'}` : '',
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <div className="py-10" role="status" aria-live="polite">
+      <div className="flex items-center gap-3 justify-center">
+        <div className="size-5 rounded-full border-2 border-brand-400/30 border-t-brand-400 animate-spin" />
+        <p className="text-[13px] text-dim">
+          {seen.summary ? 'Writing…' : `Asking ${model} via ${provider.label}…`}
+        </p>
+      </div>
+
+      {seen.summary ? (
+        <p className="text-[13.5px] leading-relaxed mt-5 max-w-prose mx-auto">
+          {seen.summary}
+          <span className="inline-block w-1.5 h-4 align-text-bottom ml-0.5 bg-brand-400 animate-pulse" />
+        </p>
+      ) : (
+        <p className="text-[11.5px] text-faint mt-2 text-center">Free and local models can take a minute.</p>
+      )}
+
+      {counted && <p className="text-[11.5px] text-faint mt-3 text-center">{counted} so far</p>}
+    </div>
   );
 }
 

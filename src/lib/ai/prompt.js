@@ -179,6 +179,44 @@ export function userMessage(summary, topic = 'investing') {
   ].join('\n');
 }
 
+/**
+ * What to show while the answer is still arriving.
+ *
+ * The wire carries JSON, and streaming raw JSON at someone is worse than a
+ * spinner. This pulls the human-readable parts out of a half-finished object:
+ * the summary as it is typed, and how many suggestions have landed so far.
+ * Deliberately string-based — `JSON.parse` cannot read an unfinished object,
+ * and a half-written string is exactly what we want to display.
+ */
+export function previewFromPartial(raw) {
+  if (typeof raw !== 'string' || !raw) return { summary: '', rows: 0, actions: 0 };
+
+  const body = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  let summary = '';
+  const at = body.search(/"summary"\s*:\s*"/);
+  if (at !== -1) {
+    const from = body.indexOf('"', body.indexOf(':', at)) + 1;
+    for (let i = from; i < body.length; i++) {
+      const c = body[i];
+      if (c === '\\') {
+        // An escape pair, or a backslash that has not been completed yet.
+        const next = body[i + 1];
+        summary += next === 'n' ? '\n' : next === 't' ? '\t' : next === undefined ? '' : next;
+        i++;
+        continue;
+      }
+      if (c === '"') break;
+      summary += c;
+    }
+  }
+
+  return {
+    summary: summary.trim(),
+    rows: (body.match(/"why"\s*:/g) || []).length,
+    actions: (body.match(/"priority"\s*:/g) || []).length,
+  };
+}
+
 export class AdviceFormatError extends Error {
   constructor(message, raw = '') {
     super(message);
