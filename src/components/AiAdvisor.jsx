@@ -453,8 +453,8 @@ function AdviceView({ advice, topic, currency, meta }) {
         <section>
           <h3 className="text-[11px] uppercase tracking-wider text-faint mb-2">{advice.rowsTitle}</h3>
           <div className="space-y-2.5">
-            {advice.rows.map((row) => (
-              <div key={row.label}>
+            {advice.rows.map((row, i) => (
+              <div key={`${i}-${row.label}`}>
                 <div className="flex items-baseline justify-between gap-3 text-[13px]">
                   <span className="font-medium">{row.label}</span>
                   <span className="tabular text-dim">{shown(row)}</span>
@@ -476,8 +476,8 @@ function AdviceView({ advice, topic, currency, meta }) {
         <section key={priority}>
           <h3 className="text-[11px] uppercase tracking-wider text-faint mb-2">{PRIORITY_LABEL[priority]}</h3>
           <div className="space-y-2">
-            {list.map((a) => (
-              <div key={a.title} className="surface rounded-2xl p-3">
+            {list.map((a, i) => (
+              <div key={`${i}-${a.title}`} className="surface rounded-2xl p-3">
                 <div className="text-[13.5px] font-semibold leading-snug">{a.title}</div>
                 {a.detail && <p className="text-[12.5px] text-dim mt-1 leading-relaxed">{a.detail}</p>}
               </div>
@@ -491,7 +491,7 @@ function AdviceView({ advice, topic, currency, meta }) {
           <section key={title}>
             <h3 className="text-[11px] uppercase tracking-wider text-faint mb-2">{title}</h3>
             <ul className="list-disc pl-4 space-y-1 text-[12.5px] text-dim leading-relaxed">
-              {list.map((x) => <li key={x}>{x}</li>)}
+              {list.map((x, i) => <li key={`${i}-${x}`}>{x}</li>)}
             </ul>
           </section>
         ) : null

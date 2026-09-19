@@ -177,50 +177,68 @@ function networkError(provider) {
  * kept until the blank line that terminates an event shows up. Errors can also
  * arrive *inside* a 200 response, which is why this returns them rather than
  * assuming a stream is a success.
+ *
+ * Whatever is left in the buffer when the stream ends is parsed too: not every
+ * server terminates its last event with a blank line, and dropping it cost the
+ * tail of the answer — which then failed to parse, looking like a bad model
+ * rather than a bad reader.
  */
 async function readEventStream(res, onChunk) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let text = '';
+  let failure = null;
+
+  const consume = (block) => {
+    for (const line of block.split(/\r?\n/)) {
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+
+      let json;
+      try {
+        json = JSON.parse(payload);
+      } catch {
+        continue; // a keep-alive or a comment line
+      }
+      if (json.error) {
+        failure = json.error;
+        return;
+      }
+
+      const delta = json.choices?.[0]?.delta ?? {};
+      const piece = typeof delta.content === 'string'
+        ? delta.content
+        : Array.isArray(delta.content)
+        ? delta.content.map((p) => p?.text || '').join('')
+        : '';
+      if (piece) {
+        text += piece;
+        onChunk?.(text);
+      }
+    }
+  };
 
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
 
-    const events = buffer.split(/\r?\n\r?\n/);
-    buffer = events.pop() ?? '';
-
-    for (const event of events) {
-      for (const line of event.split(/\r?\n/)) {
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-
-        let json;
-        try {
-          json = JSON.parse(payload);
-        } catch {
-          continue; // a keep-alive or a comment line
-        }
-        if (json.error) return { text, error: json.error };
-
-        const delta = json.choices?.[0]?.delta ?? {};
-        const piece = typeof delta.content === 'string'
-          ? delta.content
-          : Array.isArray(delta.content)
-          ? delta.content.map((p) => p?.text || '').join('')
-          : '';
-        if (piece) {
-          text += piece;
-          onChunk?.(text);
-        }
-      }
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() ?? '';
+    for (const block of blocks) {
+      consume(block);
+      if (failure) return { text, error: failure };
     }
   }
 
-  return { text, error: null };
+  // Flush the decoder (a trailing multi-byte character) and the last event,
+  // which need not have been terminated by a blank line.
+  buffer += decoder.decode();
+  if (buffer.trim()) consume(buffer);
+
+  return { text, error: failure };
 }
 
 async function openAiRequest(provider, path, { key, body, signal, onChunk }) {

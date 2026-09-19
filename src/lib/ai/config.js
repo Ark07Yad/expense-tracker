@@ -7,7 +7,31 @@
  * ticks "remember", keys live in sessionStorage and are gone when the tab is.
  */
 
-import { defaultAnswers } from './summary';
+import { FOCUSES, defaultAnswers } from './summary';
+
+/**
+ * Answers stored before the advisor had topics.
+ *
+ * `focus` used to be one string, chosen from the investing list; it is now a
+ * choice per topic. Left alone, the string reaches a `<select value={...}>` as
+ * `undefined`, so a returning user's saved choice silently disappears and the
+ * next edit persists a spread string. Migrated on read rather than in place, so
+ * an older build reading the same storage still works.
+ */
+function migrateAnswers(stored) {
+  const base = defaultAnswers();
+  const answers = { ...base, ...stored };
+  if (typeof answers.focus === 'string') {
+    const legacy = answers.focus;
+    answers.focus = {
+      ...base.focus,
+      ...(FOCUSES.investing.some((f) => f.value === legacy) ? { investing: legacy } : {}),
+    };
+  } else {
+    answers.focus = { ...base.focus, ...answers.focus };
+  }
+  return answers;
+}
 
 export const AI_STORAGE = { local: 'cointrack.ai.v1', session: 'cointrack.ai.keys' };
 
@@ -41,7 +65,7 @@ export function loadAiConfig() {
       lastByTopic: stored.lastByTopic || (stored.last ? { investing: stored.last } : {}),
       remember: !!stored.remember,
       models: stored.models || {},
-      answers: { ...base.answers, ...stored.answers },
+      answers: migrateAnswers(stored.answers),
     };
   } catch {
     return base;

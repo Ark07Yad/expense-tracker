@@ -201,7 +201,16 @@ export function previewFromPartial(raw) {
       if (c === '\\') {
         // An escape pair, or a backslash that has not been completed yet.
         const next = body[i + 1];
-        summary += next === 'n' ? '\n' : next === 't' ? '\t' : next === undefined ? '' : next;
+        if (next === undefined) break;
+        if (next === 'u') {
+          const hex = body.slice(i + 2, i + 6);
+          // A half-arrived \uXXXX: stop here rather than print its digits.
+          if (hex.length < 4) break;
+          summary += String.fromCharCode(parseInt(hex, 16));
+          i += 5;
+          continue;
+        }
+        summary += { n: '\n', t: '\t', r: '\r', b: '', f: '' }[next] ?? next;
         i++;
         continue;
       }
