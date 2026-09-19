@@ -142,6 +142,18 @@ function hydrate(stored) {
 
 /* ──────────────────────────────── Reducer ──────────────────────────────── */
 
+/**
+ * Money as it is allowed to be stored.
+ *
+ * `Number(x) || 0` lets `Infinity` through — and one infinite amount poisons
+ * every total, chart and suggestion downstream, with no way to see which entry
+ * did it. Anything that is not a finite number becomes zero.
+ */
+const money = (v) => {
+  const n = Math.abs(Number(v));
+  return Number.isFinite(n) ? n : 0;
+};
+
 function reducer(state, action) {
   switch (action.type) {
     case 'replace':
@@ -182,7 +194,7 @@ function reducer(state, action) {
         category: e.category,
         title: (e.title || '').trim() || 'Untitled',
         note: (e.note || '').trim(),
-        amount: Math.abs(Number(e.amount) || 0),
+        amount: money(e.amount),
         createdAt: Date.now(),
         /*
          * The optional fields are listed rather than spread, so a stray key
@@ -219,10 +231,7 @@ function reducer(state, action) {
             ? {
                 ...e,
                 ...action.patch,
-                amount:
-                  action.patch.amount !== undefined
-                    ? Math.abs(Number(action.patch.amount) || 0)
-                    : e.amount,
+                amount: action.patch.amount !== undefined ? money(action.patch.amount) : e.amount,
               }
             : e
         ),
@@ -244,7 +253,7 @@ function reducer(state, action) {
         category: r.category,
         title: (r.title || '').trim() || 'Imported',
         note: (r.note || '').trim(),
-        amount: Math.abs(Number(r.amount) || 0),
+        amount: money(r.amount),
         // Preserve file order within the same millisecond, so a statement's own
         // sequence survives into the ledger.
         createdAt: now + i,
@@ -404,7 +413,7 @@ function reducer(state, action) {
             category: rule.category,
             title: rule.title,
             note: rule.note,
-            amount: Math.abs(Number(rule.amount) || 0),
+            amount: money(rule.amount),
             createdAt: Date.now(),
             /** Marks the entry as generated, so the ledger can say where it came from. */
             fromRule: rule.id,

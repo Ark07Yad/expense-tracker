@@ -106,8 +106,16 @@ export function balanceAt(entries, until, opening = {}) {
       pot += amount;
       if (e.category === 'invest-transfer') toInvestments += amount;
     } else if (e.kind === 'withdrawal') {
-      pot -= amount;
-      if (e.category === 'invest-transfer') toInvestments -= amount;
+      /*
+       * Never below zero, the same rule a goal uses.
+       *
+       * Taking more out of the pot than was ever recorded going in is a
+       * data-entry gap, not a negative savings pot — and an unclamped negative
+       * pot makes `spendable` (balance − pot) *larger* than the balance, so the
+       * app would report more free to spend than the ledger says exists.
+       */
+      pot = Math.max(0, pot - amount);
+      if (e.category === 'invest-transfer') toInvestments = Math.max(0, toInvestments - amount);
     }
   }
 
