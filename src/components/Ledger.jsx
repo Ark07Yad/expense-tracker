@@ -150,7 +150,7 @@ export default function Ledger({ date, setDate, toast }) {
         {/* Fourteen-day strip. The bars are spending, so the shape of a week is
             visible without reading a single number. */}
         <div className="flex items-end gap-1 sm:gap-1.5 mb-4">
-          {strip.map((s) => {
+          {strip.map((s, index) => {
             const active = s.key === date;
             return (
               <button
@@ -158,12 +158,13 @@ export default function Ledger({ date, setDate, toast }) {
                 onClick={() => setDate(s.key)}
                 title={`${dayLabel(s.key)} · ${formatMoney(s.value, cur)}`}
                 className={`flex-1 flex flex-col items-center gap-1.5 pt-1 pb-1.5 rounded-xl transition-all
-                            ${active ? 'bg-brand-500/14' : 'hover:[background:var(--surface-hover)]'}`}
+                            ${active ? '[background:var(--surface-hover)]' : 'hover:[background:var(--surface-hover)]'}`}
               >
                 <span className="w-full h-10 flex items-end justify-center px-0.5">
                   <span
-                    className="w-full rounded-sm transition-all"
+                    className="w-full rounded-sm grow-y transition-all"
                     style={{
+                      animationDelay: `${index * 22}ms`,
                       height: `${Math.max(4, s.height * 100)}%`,
                       background: active ? 'var(--metal)' : 'var(--border-strong)',
                       opacity: s.value ? 1 : 0.35,

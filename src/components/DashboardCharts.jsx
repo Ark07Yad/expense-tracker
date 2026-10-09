@@ -11,6 +11,7 @@
 import {
   Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { chartMotion } from '../lib/chartMotion';
 import { formatMoney } from '../lib/calc';
 import { tooltipStyle } from './ui';
 
@@ -22,7 +23,7 @@ export function SpendTrend({ data, cur }) {
         <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="dashSpend" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.45} />
+              <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.16} />
               <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
@@ -39,7 +40,7 @@ export function SpendTrend({ data, cur }) {
             formatter={(v, n) => [formatMoney(v, cur), n === 'avg' ? '7-day average' : 'Spent']}
           />
           <Area
-            isAnimationActive={false}
+            {...chartMotion(0)}
             type="monotone"
             dataKey="value"
             stroke="var(--color-brand-400)"
@@ -47,7 +48,7 @@ export function SpendTrend({ data, cur }) {
             fill="url(#dashSpend)"
           />
           <Area
-            isAnimationActive={false}
+            {...chartMotion(1)}
             type="monotone"
             dataKey="avg"
             stroke="var(--tone-invest)"
@@ -74,7 +75,7 @@ export function CategoryDonut({ data, cur }) {
           outerRadius="94%"
           paddingAngle={2}
           stroke="none"
-          isAnimationActive={false}
+          {...chartMotion(0)}
         >
           {data.map((c) => <Cell key={c.id} fill={c.color} />)}
         </Pie>
@@ -96,7 +97,7 @@ export function NetWorthSpark({ data, cur }) {
           <YAxis hide domain={[(min) => Math.max(0, min * 0.88), (max) => max * 1.04]} />
           <defs>
             <linearGradient id="dashWorth" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.4} />
+              <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.16} />
               <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
@@ -106,7 +107,7 @@ export function NetWorthSpark({ data, cur }) {
             formatter={(v, n) => [formatMoney(v, cur), n === 'invested' ? 'Paid in' : 'Value']}
           />
           <Area
-            isAnimationActive={false}
+            {...chartMotion(0)}
             type="monotone"
             dataKey="value"
             stroke="var(--tone-invest)"
@@ -114,7 +115,7 @@ export function NetWorthSpark({ data, cur }) {
             fill="url(#dashWorth)"
           />
           <Area
-            isAnimationActive={false}
+            {...chartMotion(1)}
             type="monotone"
             dataKey="invested"
             stroke="var(--text-faint)"

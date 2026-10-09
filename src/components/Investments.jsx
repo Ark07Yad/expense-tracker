@@ -17,6 +17,7 @@ import {
   Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { chartMotion } from '../lib/chartMotion';
 import { useStore } from '../lib/store';
 import { netWorthOf, useDebts, useInvestments } from '../lib/useFinance';
 import { ASSET_CLASSES, assetClassById } from '../lib/data';
@@ -146,7 +147,7 @@ export default function Investments({ toast, onNavigate }) {
                 <AreaChart data={inv.series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <defs>
                     <linearGradient id="invWorth" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.42} />
+                      <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.16} />
                       <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
@@ -164,11 +165,11 @@ export default function Investments({ toast, onNavigate }) {
                   />
                   <Area
                     type="monotone" dataKey="value" stroke="var(--tone-invest)" strokeWidth={2.4}
-                    fill="url(#invWorth)" isAnimationActive={false}
+                    fill="url(#invWorth)" {...chartMotion(0)}
                   />
                   <Line
                     type="monotone" dataKey="invested" stroke="var(--text-faint)" strokeWidth={1.6}
-                    strokeDasharray="5 4" dot={false} isAnimationActive={false}
+                    strokeDasharray="5 4" dot={false} {...chartMotion(1)}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -204,7 +205,7 @@ export default function Investments({ toast, onNavigate }) {
                   <PieChart>
                     <Pie
                       data={inv.byClass} dataKey="value" nameKey="label"
-                      innerRadius="60%" outerRadius="95%" paddingAngle={2} stroke="none" isAnimationActive={false}
+                      innerRadius="60%" outerRadius="95%" paddingAngle={2} stroke="none" {...chartMotion(0)}
                     >
                       {inv.byClass.map((c) => <Cell key={c.id} fill={c.color} />)}
                     </Pie>

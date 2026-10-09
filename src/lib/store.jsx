@@ -692,7 +692,7 @@ export function StoreProvider({ children }) {
       document.documentElement.dataset.theme = resolved;
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', resolved === 'dark' ? '#0a0912' : '#f7f7fa');
+        ?.setAttribute('content', resolved === 'dark' ? '#0a0a0b' : '#fafafa');
     };
     apply();
     if (state.theme !== 'system') return;

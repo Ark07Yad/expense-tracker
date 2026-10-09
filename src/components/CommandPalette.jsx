@@ -140,7 +140,7 @@ export default function CommandPalette({ onClose, commands, findEntries, returnF
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[10vh] sm:pt-[14vh]">
       <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm animate-[pop_0.18s_ease-out]"
+        className="absolute inset-0 bg-black/60 animate-[pop_0.18s_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -150,7 +150,7 @@ export default function CommandPalette({ onClose, commands, findEntries, returnF
         aria-modal="true"
         aria-label="Search and jump"
         className="relative w-full max-w-xl rounded-3xl border border-hair overflow-hidden animate-pop"
-        style={{ background: 'var(--bg-elev)', boxShadow: 'var(--shadow-card)' }}
+        style={{ background: 'var(--bg-elev)', boxShadow: 'var(--shadow-pop)' }}
       >
         <div className="flex items-center gap-3 px-4 border-b border-hair">
           <Icon name="search" className="size-[18px] text-faint shrink-0" />
@@ -208,7 +208,7 @@ export default function CommandPalette({ onClose, commands, findEntries, returnF
                   onMouseMove={() => setActive(index)}
                   onClick={() => run(item)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer text-[13.5px]
-                              ${selected ? 'bg-brand-500/14 text-brandy' : ''}`}
+                              ${selected ? '[background:var(--surface-hover)]' : ''}`}
                 >
                   <Icon name={item.icon || 'chevR'} className={`size-[17px] shrink-0 ${selected ? '' : 'text-faint'}`} />
                   <span className="truncate font-medium">{item.label}</span>

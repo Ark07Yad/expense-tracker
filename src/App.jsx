@@ -303,7 +303,7 @@ export default function App() {
 
           <nav ref={sideNav.ref} className="relative flex flex-col gap-1">
             {sideNav.box && (
-              <span aria-hidden="true" className="thumb rounded-2xl bg-brand-500/14" style={thumbStyle(sideNav.box)} />
+              <span aria-hidden="true" className="thumb rounded-2xl [background:var(--surface-hover)]" style={thumbStyle(sideNav.box)} />
             )}
             {allNav.map((item) => (
               <button
@@ -313,7 +313,7 @@ export default function App() {
                 data-active={tab === item.id}
                 className={`relative z-[1] flex items-center gap-3 px-3 py-2.5 rounded-2xl text-[13.5px] font-medium transition-colors
                   ${tab === item.id
-                    ? `text-brandy ${sideNav.box ? '' : 'bg-brand-500/14'}`
+                    ? `text-[color:var(--text)] ${sideNav.box ? '' : '[background:var(--surface-hover)]'}`
                     : 'text-dim hover:[background:var(--surface)] hover:text-[color:var(--text)]'}`}
               >
                 <Icon name={item.icon} className="size-[18px]" />
@@ -326,7 +326,7 @@ export default function App() {
           <button
             onClick={() => setComposerOpen(true)}
             className="metal mt-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl
-                       text-[13.5px] font-semibold transition-all hover:brightness-[1.08] active:scale-[0.97]"
+                       text-[13.5px] font-medium transition-all hover:opacity-90 active:scale-[0.97]"
           >
             <Icon name="plus" className="size-4" />
             New entry
@@ -398,7 +398,7 @@ export default function App() {
           style={{ background: 'var(--bg-elev)' }}
         >
           {bottomNav.box && (
-            <span aria-hidden="true" className="thumb rounded-2xl bg-brand-500/12" style={thumbStyle(bottomNav.box)} />
+            <span aria-hidden="true" className="thumb rounded-2xl [background:var(--surface-hover)]" style={thumbStyle(bottomNav.box)} />
           )}
           {NAV.map((item) => (
             <button
@@ -407,7 +407,7 @@ export default function App() {
               aria-current={tab === item.id ? 'page' : undefined}
               data-active={tab === item.id}
               className={`relative z-[1] flex flex-col items-center gap-1 px-2 py-2 rounded-2xl transition-all active:scale-90
-                ${tab === item.id ? 'text-brandy' : 'text-faint'}`}
+                ${tab === item.id ? 'text-[color:var(--text)]' : 'text-faint'}`}
             >
               <Icon name={item.icon} className="size-[19px]" />
               <span className="text-[9.5px] font-medium">{item.label}</span>
@@ -419,7 +419,7 @@ export default function App() {
             aria-expanded={moreOpen}
             data-active={inExtra}
             className={`relative z-[1] flex flex-col items-center gap-1 px-2 py-2 rounded-2xl transition-all active:scale-90
-              ${inExtra ? 'text-brandy' : 'text-faint'}`}
+              ${inExtra ? 'text-[color:var(--text)]' : 'text-faint'}`}
           >
             <span className="relative grid place-items-center size-[19px]">
               <Icon name="menu" className="size-[19px]" />

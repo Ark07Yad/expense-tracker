@@ -110,22 +110,18 @@ export const mix = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transpa
 
 /* ────────────────────────────────  Layout  ─────────────────────────────── */
 
+/**
+ * The basic plane everything sits on.
+ *
+ * `glow` and `sheen` are still accepted and no longer drawn. They were a
+ * blurred violet halo and a light that swept across the card forever; the
+ * hero cards asked for both. A card is now a flat surface with a hairline
+ * edge, and what makes one more important than another is what is in it.
+ */
+// eslint-disable-next-line no-unused-vars
 export function Card({ className = '', children, glow = false, sheen = false, ...rest }) {
   return (
     <div data-spot="" className={`surface rounded-3xl relative overflow-hidden ${className}`} {...rest}>
-      {glow && (
-        <div className="pointer-events-none absolute -top-24 -right-16 size-56 rounded-full blur-3xl"
-             style={{ background: 'radial-gradient(circle, rgb(142 107 255 / 0.28), transparent 70%)' }} />
-      )}
-      {sheen && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
-          <div className="absolute inset-y-0 w-1/3 -skew-x-12 opacity-[0.07]"
-               style={{
-                 background: 'linear-gradient(90deg, transparent, #fff, transparent)',
-                 animation: 'sweep 7s ease-in-out infinite',
-               }} />
-        </div>
-      )}
       {children}
     </div>
   );
@@ -143,11 +139,14 @@ export function SectionTitle({ icon, children, action, sub }) {
      */
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-3 mb-3">
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.14em] text-dim">
-          {icon && <Icon name={icon} className="size-4" />}
+        {/* Sentence case at a readable size. The small tracked capitals are
+            kept for labels on figures, where they are a caption; as a section
+            heading they made every section whisper at the same volume. */}
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em]">
+          {icon && <Icon name={icon} className="size-4 text-faint" />}
           {children}
         </h2>
-        {sub && <p className="text-[12px] text-faint mt-1">{sub}</p>}
+        {sub && <p className="text-[12.5px] text-faint mt-0.5">{sub}</p>}
       </div>
       {action && <div className="shrink-0 -mx-1 px-1 overflow-x-auto sm:overflow-visible">{action}</div>}
     </div>
@@ -157,7 +156,7 @@ export function SectionTitle({ icon, children, action, sub }) {
 /* ────────────────────────────────  Buttons  ────────────────────────────── */
 
 const VARIANTS = {
-  primary: 'metal hover:brightness-[1.08] font-semibold',
+  primary: 'metal hover:opacity-90 font-medium',
   ghost: 'surface hover:[background:var(--surface-hover)] text-[color:var(--text)]',
   subtle: 'bg-transparent hover:[background:var(--surface)] text-dim hover:text-[color:var(--text)]',
   danger: 'bg-rose-500/12 text-bad hover:bg-rose-500/20 border border-rose-500/25',
@@ -559,13 +558,12 @@ export function Ring({ value, max, size = 190, stroke = 13, children, tone = 'br
     return () => cancelAnimationFrame(id);
   }, [clamped]);
 
-  const gid = `ring-${tone}-${size}`;
-  const stops = {
-    brand: ['var(--ring-a)', 'var(--ring-b)', 'var(--ring-c)'],
-    over: ['#fbbf24', '#fb7185', '#f43f5e'],
-    earn: ['#6ee7b7', '#34d399', '#059669'],
-    save: ['#7dd3fc', '#38bdf8', '#0284c7'],
-  }[tone] || ['var(--ring-a)', 'var(--ring-b)', 'var(--ring-c)'];
+  const colour = {
+    brand: 'var(--ring-b)',
+    over: 'var(--tone-bad)',
+    earn: 'var(--tone-earn)',
+    save: 'var(--tone-save)',
+  }[tone] || 'var(--ring-b)';
 
   const paceAngle = pace !== null ? Math.min(1, Math.max(0, pace)) * 360 - 90 : null;
 
@@ -577,17 +575,10 @@ export function Ring({ value, max, size = 190, stroke = 13, children, tone = 'br
       aria-label={`${Math.round(clamped * 100)}% of the limit used`}
     >
       <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={stops[0]} />
-            <stop offset="55%" stopColor={stops[1]} />
-            <stop offset="100%" stopColor={stops[2]} />
-          </linearGradient>
-        </defs>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
         <circle
           cx={size / 2} cy={size / 2} r={r} fill="none"
-          stroke={`url(#${gid})`} strokeWidth={stroke} strokeLinecap="round"
+          stroke={colour} strokeWidth={stroke} strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c * (1 - shown)}
           style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(0.22,1,0.36,1)' }}
         />
@@ -623,7 +614,7 @@ export function Ring({ value, max, size = 190, stroke = 13, children, tone = 'br
  * whole point, so the bar has to be told rather than assuming.
  */
 export function Bar({
-  value, target, label, sub, color = '#8e6bff', pace = null, right,
+  value, target, label, sub, color = 'var(--color-brand-400)', pace = null, right,
   compact = false, overTone = 'bad',
 }) {
   const p = target > 0 ? (value / target) * 100 : 0;
@@ -639,7 +630,7 @@ export function Bar({
         </div>
       )}
       <div
-        className="relative h-2 rounded-full overflow-hidden"
+        className="relative h-1.5 rounded-full overflow-hidden"
         style={{ background: 'var(--border)' }}
         role="progressbar"
         aria-valuenow={Math.round(p)}
@@ -647,15 +638,13 @@ export function Bar({
         aria-valuemax={100}
         aria-label={typeof label === 'string' ? label : undefined}
       >
+        {/* Grows in from the left on arrival (a transform, so nothing reflows),
+            and eases to its new width when the figure behind it changes. */}
         <div
-          className="h-full rounded-full"
+          className="h-full rounded-full grow-x"
           style={{
             width: `${width}%`,
-            background: over
-              ? overTone === 'good'
-                ? 'linear-gradient(90deg,#34d399,#10b981)'
-                : 'linear-gradient(90deg,#fb923c,#f43f5e)'
-              : color,
+            background: over ? (overTone === 'good' ? 'var(--tone-good)' : 'var(--tone-bad)') : color,
             transition: 'width 700ms cubic-bezier(0.22,1,0.36,1)',
           }}
         />
@@ -781,7 +770,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm animate-[pop_0.2s_ease-out]"
+        className="absolute inset-0 bg-black/60 animate-[pop_0.2s_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -792,7 +781,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
         aria-labelledby={titleId}
         className={`relative w-full ${widths[size]} max-h-[92dvh] sm:max-h-[86dvh] flex flex-col
                     rounded-t-3xl sm:rounded-3xl surface animate-rise sm:mx-4`}
-        style={{ background: 'var(--bg-elev)' }}
+        style={{ background: 'var(--bg-elev)', boxShadow: 'var(--shadow-pop)' }}
       >
         {/*
           * Tab guards.
@@ -945,8 +934,8 @@ export function Toast({ message, onDone }) {
       aria-live="polite"
       className="fixed left-1/2 -translate-x-1/2 bottom-24 sm:bottom-8 z-[60] animate-rise"
     >
-      <div className="surface rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-sm shadow-xl"
-           style={{ background: 'var(--bg-elev)' }}>
+      <div className="surface rounded-2xl px-4 py-2.5 flex items-center gap-2.5 text-sm"
+           style={{ background: 'var(--bg-elev)', boxShadow: 'var(--shadow-pop)' }}>
         <span className="grid place-items-center size-5 rounded-full bg-brand-500/25 text-brandy">
           <Icon name="check" className="size-3.5" />
         </span>
@@ -975,8 +964,8 @@ export function CategoryDot({ color, icon, size = 'md', className = '' }) {
 export const tooltipStyle = {
   background: 'var(--bg-elev)',
   border: '1px solid var(--border)',
-  borderRadius: 14,
+  borderRadius: 10,
   fontSize: 12,
   padding: '8px 10px',
-  boxShadow: 'var(--shadow-card)',
+  boxShadow: 'var(--shadow-pop)',
 };

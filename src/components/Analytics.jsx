@@ -13,6 +13,7 @@ import {
   Area, AreaChart, Bar as RBar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { chartMotion } from '../lib/chartMotion';
 import { useStore } from '../lib/store';
 import SectionTips from './SectionTips';
 
@@ -220,12 +221,12 @@ export default function Analytics({ onNavigate }) {
                       formatter={(v, n) => [formatMoney(Math.abs(v), cur), LABELS[n] || n]}
                     />
                     <ReferenceLine y={0} stroke="var(--border-strong)" />
-                    <RBar dataKey="earning" stackId="flow" fill="var(--tone-earn)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                    <RBar dataKey="expenseNeg" stackId="flow" fill="var(--tone-spend)" radius={[0, 0, 4, 4]} isAnimationActive={false} />
-                    <RBar dataKey="savingNeg" stackId="flow" fill="var(--tone-save)" radius={[0, 0, 4, 4]} isAnimationActive={false} />
+                    <RBar dataKey="earning" stackId="flow" fill="var(--tone-earn)" radius={[4, 4, 0, 0]} {...chartMotion(0)} />
+                    <RBar dataKey="expenseNeg" stackId="flow" fill="var(--tone-spend)" radius={[0, 0, 4, 4]} {...chartMotion(1)} />
+                    <RBar dataKey="savingNeg" stackId="flow" fill="var(--tone-save)" radius={[0, 0, 4, 4]} {...chartMotion(2)} />
                     <Line
                       type="monotone" dataKey="cumNet" stroke="var(--color-brand-300)" strokeWidth={2.4}
-                      dot={false} isAnimationActive={false}
+                      dot={false} {...chartMotion(3)}
                     />
                     <Legend
                       formatter={(n) => <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{LABELS[n] || n}</span>}
@@ -236,7 +237,7 @@ export default function Analytics({ onNavigate }) {
                   <AreaChart data={cumulative} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                     <defs>
                       <linearGradient id="anCum" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.4} />
+                        <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.16} />
                         <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
@@ -253,12 +254,12 @@ export default function Analytics({ onNavigate }) {
                     />
                     <Area
                       type="monotone" dataKey="cumExpense" stroke="var(--color-brand-400)" strokeWidth={2.4}
-                      fill="url(#anCum)" isAnimationActive={false}
+                      fill="url(#anCum)" {...chartMotion(0)}
                     />
                     {budgetTotal > 0 && (
                       <Line
                         type="linear" dataKey="pace" stroke="var(--tone-warn)" strokeWidth={1.8}
-                        strokeDasharray="6 5" dot={false} isAnimationActive={false}
+                        strokeDasharray="6 5" dot={false} {...chartMotion(1)}
                       />
                     )}
                     <Legend
@@ -286,7 +287,7 @@ export default function Analytics({ onNavigate }) {
                         stackId="mix"
                         fill={c.color}
                         radius={i === arr.length - 1 ? [4, 4, 0, 0] : 0}
-                        isAnimationActive={false}
+                        {...chartMotion(0)}
                       />
                     ))}
                     <Legend
@@ -326,7 +327,7 @@ export default function Analytics({ onNavigate }) {
                   <PieChart>
                     <Pie
                       data={donutData} dataKey="total" nameKey="label"
-                      innerRadius="60%" outerRadius="95%" paddingAngle={2} stroke="none" isAnimationActive={false}
+                      innerRadius="60%" outerRadius="95%" paddingAngle={2} stroke="none" {...chartMotion(0)}
                     >
                       {donutData.map((c) => <Cell key={c.id} fill={c.color} />)}
                     </Pie>
@@ -613,8 +614,9 @@ function SpendHeatmap({ range, entries, currency }) {
             <span
               key={c.key}
               title={`${dayLabel(c.key)} · ${formatMoney(c.value, currency)}`}
-              className="rounded-[3px] transition-transform hover:scale-125 cursor-default"
+              className="rounded-[3px] fade-in transition-transform hover:scale-125 cursor-default"
               style={{
+                animationDelay: `${Math.floor(i / 7) * 14}ms`,
                 background: c.future
                   ? 'transparent'
                   : c.value === 0

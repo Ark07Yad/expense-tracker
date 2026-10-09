@@ -460,7 +460,7 @@ function AdviceView({ advice, topic, currency, meta }) {
                   <span className="tabular text-dim">{shown(row)}</span>
                 </div>
                 <div className="h-1.5 rounded-full mt-1 overflow-hidden" style={{ background: 'var(--border)' }}>
-                  <div className="h-full rounded-full bg-brand-400" style={{ width: `${width(row)}%` }} />
+                  <div className="h-full rounded-full bg-brand-400 grow-x" style={{ width: `${width(row)}%` }} />
                 </div>
                 {row.why && <p className="text-[11.5px] text-faint mt-1 leading-relaxed">{row.why}</p>}
               </div>
