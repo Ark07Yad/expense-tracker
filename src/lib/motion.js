@@ -203,3 +203,47 @@ export function animateOut(node, done, { duration = 220 } = {}) {
   // never decides whether the delete happens.
   setTimeout(finish, duration + 80);
 }
+
+/**
+ * Where the selection highlight should sit.
+ *
+ * Returns a ref for the container and the box of whichever child is marked
+ * `data-active="true"`, so one highlight element can glide between options
+ * instead of each option flipping its own background on and off.
+ *
+ * Measured, not assumed: labels differ in width, the sidebar wraps on resize,
+ * and web fonts land after first paint — so it re-measures on a
+ * ResizeObserver. Where nothing can be measured (no layout engine, as under
+ * test, or a hidden container) it returns `null`, and the caller falls back to
+ * styling the active option directly. The highlight is an enhancement of the
+ * selected state, never the only sign of it.
+ */
+export function useSlidingIndicator(activeKey, layoutKey = '') {
+  const ref = useRef(null);
+  const [box, setBox] = useState(null);
+
+  useLayoutEffect(() => {
+    const host = ref.current;
+    if (!host) return undefined;
+
+    const measure = () => {
+      const el = host.querySelector('[data-active="true"]');
+      if (!el || !el.offsetWidth) {
+        setBox(null);
+        return;
+      }
+      const next = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+      setBox((prev) =>
+        prev && prev.x === next.x && prev.y === next.y && prev.w === next.w && prev.h === next.h ? prev : next
+      );
+    };
+
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [activeKey, layoutKey]);
+
+  return { ref, box };
+}

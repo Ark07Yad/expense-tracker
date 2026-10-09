@@ -64,6 +64,7 @@ export const SHORTCUTS = [
   { keys: ['n'], label: 'New entry' },
   { keys: ['t'], label: 'Jump to today' },
   { keys: ['d'], label: 'Switch theme' },
+  { keys: ['/'], label: 'Search and jump — also ⌘K or Ctrl K' },
   { keys: ['?'], label: 'This list' },
   { keys: ['Esc'], label: 'Close a dialog' },
 ];

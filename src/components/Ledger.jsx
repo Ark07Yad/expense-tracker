@@ -181,7 +181,9 @@ export default function Ledger({ date, setDate, toast }) {
           })}
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5">
+        {/* Four kinds, so four across or two by two — three columns left the
+            last tile stranded on a row of its own at every width. */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {KINDS.map((k) => (
             <div key={k.id} className="surface rounded-2xl p-3">
               <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-faint mb-1">

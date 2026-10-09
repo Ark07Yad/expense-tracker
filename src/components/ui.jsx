@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useCountUp, stagger } from '../lib/motion';
+import { useCountUp, useSlidingIndicator, stagger } from '../lib/motion';
 import { formatMoney, formatPercent } from '../lib/calc';
 import { useStore } from '../lib/store';
 
@@ -112,7 +112,7 @@ export const mix = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transpa
 
 export function Card({ className = '', children, glow = false, sheen = false, ...rest }) {
   return (
-    <div className={`surface rounded-3xl relative overflow-hidden ${className}`} {...rest}>
+    <div data-spot="" className={`surface rounded-3xl relative overflow-hidden ${className}`} {...rest}>
       {glow && (
         <div className="pointer-events-none absolute -top-24 -right-16 size-56 rounded-full blur-3xl"
              style={{ background: 'radial-gradient(circle, rgb(142 107 255 / 0.28), transparent 70%)' }} />
@@ -381,10 +381,33 @@ export function MoneyInput({
   );
 }
 
+/**
+ * A row of mutually exclusive choices.
+ *
+ * The selected option used to flip its own background on and the previous one
+ * off, with nothing connecting the two. Now a single highlight glides from one
+ * to the other, which is what tells you the control *moved* rather than that
+ * two unrelated things changed colour.
+ *
+ * The highlight is decoration on top of `aria-selected`, never the only sign:
+ * until it can be measured (first paint, no layout engine, a hidden container)
+ * the selected tab simply wears the fill itself, exactly as before. Every tab
+ * carries the same transparent border as the highlight so that swapping
+ * between the two never changes a tab's size.
+ */
 export function Segmented({ options, value, onChange, className = '', size = 'md' }) {
   const pad = size === 'sm' ? 'px-2.5 py-1 text-[12px]' : 'px-3.5 py-1.5 text-[13px]';
+  const { ref, box } = useSlidingIndicator(value, options.map((o) => o.label).join('|'));
+
   return (
-    <div className={`inline-flex p-1 rounded-2xl surface gap-1 ${className}`} role="tablist">
+    <div ref={ref} className={`relative inline-flex p-1 rounded-2xl surface gap-1 ${className}`} role="tablist">
+      {box && (
+        <span
+          aria-hidden="true"
+          className="thumb metal rounded-xl"
+          style={{ width: box.w, height: box.h, transform: `translate3d(${box.x}px, ${box.y}px, 0)` }}
+        />
+      )}
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -392,9 +415,13 @@ export function Segmented({ options, value, onChange, className = '', size = 'md
             key={o.value}
             role="tab"
             aria-selected={active}
+            data-active={active}
             onClick={() => onChange(o.value)}
-            className={`relative rounded-xl font-medium transition-all duration-200 whitespace-nowrap ${pad}
-                        ${active ? 'metal' : 'text-dim hover:text-[color:var(--text)]'}`}
+            className={`relative z-[1] rounded-xl border border-transparent font-medium whitespace-nowrap
+                        transition-colors duration-200 active:scale-[0.97] ${pad}
+                        ${active
+                          ? box ? 'text-[color:var(--metal-text)]' : 'metal'
+                          : 'text-dim hover:text-[color:var(--text)]'}`}
           >
             {o.icon && <Icon name={o.icon} className="size-3.5 inline -mt-px mr-1" />}
             {o.label}

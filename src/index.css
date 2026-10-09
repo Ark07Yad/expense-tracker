@@ -115,6 +115,8 @@
   --tone-bad:    #fb7185;
   --tone-info:   #38bdf8;
   --tone-brand:  #b096ff;
+  /* The light a card catches under the pointer. */
+  --spot: rgb(176 150 255 / 0.11);
 
   color-scheme: dark;
 }
@@ -155,6 +157,7 @@
   --tone-bad:    #be123c;
   --tone-info:   #0369a1;
   --tone-brand:  #5423ba;
+  --spot: rgb(84 35 186 / 0.06);
 
   color-scheme: light;
 }
@@ -295,6 +298,24 @@ body::before {
     cursor: pointer;
   }
 
+  /*
+   * One focus ring for everything you can tab to.
+   *
+   * Buttons were falling back to each browser's own ring — a different blue in
+   * every engine, and nearly invisible on the violet surfaces. `:where()` keeps
+   * this at zero specificity, so a field that draws its own ring with
+   * `outline-none` + `focus:ring` still wins. `:focus-visible` means a mouse
+   * click never shows it; only the keyboard does.
+   */
+  /* Tailwind's reset leaves buttons on the arrow cursor; anything you can
+     press should say so. Zero specificity, so a `cursor-*` utility still wins. */
+  :where(button:not(:disabled), summary, [role='tab'], [role='option']) { cursor: pointer; }
+
+  :where(button, a, summary, [role='tab'], [role='option'], [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid var(--tone-brand);
+    outline-offset: 2px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
@@ -302,6 +323,79 @@ body::before {
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Motion
+   ══════════════════════════════════════════════════════════════════════════
+   One rhythm for the whole app. Arriving decelerates, leaving is quicker than
+   arriving, and nothing animates a property that makes the page re-lay itself
+   out — transform and opacity only, plus the width of one absolutely
+   positioned highlight that no sibling depends on. */
+:root {
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-quick: 140ms;
+  --motion-base: 220ms;
+  --motion-slide: 340ms;
+}
+
+/*
+ * Skip to content.
+ *
+ * Off screen until it has keyboard focus, then the first thing on it. Without
+ * one, every visit by keyboard starts with a walk through the whole sidebar.
+ */
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 70;
+  padding: 0.6rem 1rem;
+  border-radius: 1rem;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card);
+  transform: translateY(-200%);
+  transition: transform var(--motion-quick) var(--motion-ease);
+}
+.skip-link:focus-visible { transform: none; }
+
+/* The selection highlight that glides between tabs and nav items. */
+.thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transition:
+    transform var(--motion-slide) var(--motion-ease),
+    width var(--motion-slide) var(--motion-ease),
+    height var(--motion-slide) var(--motion-ease);
+  will-change: transform;
+}
+
+/*
+ * A card catches the light under the pointer.
+ *
+ * Only where there is a pointer that hovers — on touch it would stick wherever
+ * the last tap landed — and not at all for anyone who has asked for less
+ * motion. `--mx`/`--my` are set by one delegated listener (lib/spotlight.js);
+ * the overlay never takes a click.
+ */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  [data-spot]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), var(--spot), transparent 62%);
+    opacity: 0;
+    transition: opacity var(--motion-base) var(--motion-ease);
+  }
+  [data-spot]:hover::after { opacity: 1; }
 }
 
 /* Recharts tweaks */
