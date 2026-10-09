@@ -14,19 +14,19 @@ import { go, startWithSampleData, watchForErrors } from './helpers';
 /** Distinct values of an attribute on the first matching element, over time. */
 const sample = (page, selector, attribute, ms = 1100) =>
   page.evaluate(
-    ({ selector, attribute, ms }) =>
+    ({ query, name, duration }) =>
       new Promise((resolve) => {
         const seen = new Set();
         const started = performance.now();
         const tick = () => {
-          const el = document.querySelector(selector);
-          if (el) seen.add(el.getAttribute(attribute));
-          if (performance.now() - started < ms) requestAnimationFrame(tick);
+          const el = document.querySelector(query);
+          if (el) seen.add(el.getAttribute(name));
+          if (performance.now() - started < duration) requestAnimationFrame(tick);
           else resolve(seen.size);
         };
         requestAnimationFrame(tick);
       }),
-    { selector, attribute, ms }
+    { query: selector, name: attribute, duration: ms }
   );
 
 const BAR = 'main .recharts-bar-rectangle path, main .recharts-bar-rectangle rect';
