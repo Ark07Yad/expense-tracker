@@ -584,7 +584,25 @@ const StoreContext = createContext(null);
 export function StoreProvider({ children }) {
   // The synchronous mirror is read during the very first render so a returning
   // user never sees an empty app flash before IndexedDB resolves.
-  const [state, dispatch] = useReducer(reducer, undefined, () => hydrate(persist.loadSync()));
+  /**
+   * What this tab was handed by storage, as opposed to what its user made.
+   *
+   * `booted` holds the state objects that came straight from storage at
+   * start-up; `heldAt` is how recent the data in memory is. Both exist for one
+   * rule — **a tab that has changed nothing writes nothing** — and for judging
+   * "is storage newer than what I have?" against what this tab actually has,
+   * not against storage itself.
+   */
+  const booted = useRef(new WeakSet());
+  const heldAt = useRef(0);
+
+  const [state, dispatch] = useReducer(reducer, undefined, () => {
+    const raw = persist.loadSync();
+    const initial = hydrate(raw);
+    booted.current.add(initial);
+    heldAt.current = raw?.savedAt || 0;
+    return initial;
+  });
 
   /**
    * True while the next state change is one we just read *from* storage rather
@@ -599,31 +617,54 @@ export function StoreProvider({ children }) {
    */
   const adopting = useRef(false);
 
-  // Authoritative read: whichever backend holds the newer copy wins. Skipped if
-  // the user has already started typing, so a slow IDB read cannot clobber
-  // fresh input.
+  /**
+   * Take storage's copy if it is newer than what this tab holds.
+   *
+   * "What this tab holds" is the newer of what it loaded and what it has since
+   * written or is about to write. It used to be compared against the mirror
+   * as re-read at that moment — which is storage compared with storage: if
+   * another tab had written in between, the two were equal and the newer data
+   * was never adopted, although this tab was still showing the old.
+   */
+  const adoptIfNewer = (stored) => {
+    if (!stored) return;
+    const mine = Math.max(heldAt.current, persist.lastWriteAt());
+    if ((stored.savedAt || 0) <= mine) return;
+    adopting.current = true;
+    heldAt.current = stored.savedAt;
+    dispatch({ type: 'replace', state: stored });
+  };
+
+  // Authoritative read: whichever backend holds the newer copy wins. An edit
+  // made while a slow IndexedDB read was in flight is newer than anything that
+  // read can return, so it cannot be clobbered.
   useEffect(() => {
     let cancelled = false;
     persist.load().then((stored) => {
-      if (cancelled || !stored) return;
-      // Re-reading the mirror here rather than trusting the one from mount is
-      // what stops a slow IndexedDB read from clobbering edits made in the
-      // meantime: by now the mirror carries them and is the newer copy.
-      const mirrorAt = persist.loadSync()?.savedAt || 0;
-      if ((stored.savedAt || 0) > mirrorAt) {
-        adopting.current = true;
-        dispatch({ type: 'replace', state: stored });
-      }
+      if (!cancelled) adoptIfNewer(stored);
     });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist every change the *user* makes. Debounced inside `persist`, so typing
-  // an amount does not open an IndexedDB transaction per keystroke. A state that
-  // came from storage is skipped — writing it back is what starts the echo.
+  /*
+   * Persist every change the *user* makes. Debounced inside `persist`, so
+   * typing an amount does not open an IndexedDB transaction per keystroke.
+   *
+   * Two kinds of state are not the user's and are never written back:
+   *
+   *   - one adopted from another tab — writing it back is what starts an echo;
+   *   - the one this tab started with. This is the important one. It used to
+   *     be saved on open, stamped with the time of opening, so a tab opened in
+   *     the moment before another tab's pending save landed wrote *older* data
+   *     under a *newer* stamp. The newer stamp won, the other tab adopted it,
+   *     and its entry was gone. Firefox slows timers in a background tab, which
+   *     stretched that moment to a full second.
+   */
   useEffect(() => {
+    if (booted.current.has(state)) return;
     if (adopting.current) {
       adopting.current = false;
       return;
@@ -644,15 +685,11 @@ export function StoreProvider({ children }) {
    * that arrives while this tab has an unsaved edit in flight is ignored,
    * because our own pending write will be the newer one.
    */
-  useEffect(() =>
-    persist.watchOtherTabs(() => {
-      persist.load().then((stored) => {
-        if (stored && (stored.savedAt || 0) > persist.lastWriteAt()) {
-          adopting.current = true;
-          dispatch({ type: 'replace', state: stored });
-        }
-      });
-    }), []);
+  useEffect(
+    () => persist.watchOtherTabs(() => persist.load().then(adoptIfNewer)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   // A tab being hidden or closed is the moment a debounced write would be lost.
   useEffect(() => {

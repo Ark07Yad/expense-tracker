@@ -351,7 +351,16 @@ function getChannel() {
 /** The last write this tab made, so it can ignore the echo of its own message. */
 let lastLocalWrite = 0;
 
-export const lastWriteAt = () => lastLocalWrite;
+/**
+ * How recent this tab's own data is — including a save that is still waiting
+ * out its debounce.
+ *
+ * The pending one matters. A write from another tab that arrives while this
+ * tab has an edit in flight is older than that edit, and adopting it would
+ * replace what the person just typed in memory while the pending save went on
+ * to write it anyway — two tabs, each holding half of the truth.
+ */
+export const lastWriteAt = () => Math.max(lastLocalWrite, pending?.savedAt || 0);
 
 /**
  * Subscribe to writes from other tabs. `onRemoteWrite(savedAt)` is called only
@@ -362,7 +371,7 @@ export function watchOtherTabs(onRemoteWrite) {
   if (!ch) return () => {};
   const handler = (event) => {
     const at = event?.data?.savedAt;
-    if (typeof at === 'number' && at > lastLocalWrite) onRemoteWrite(at);
+    if (typeof at === 'number' && at > lastWriteAt()) onRemoteWrite(at);
   };
   ch.addEventListener('message', handler);
   return () => ch.removeEventListener('message', handler);

@@ -101,6 +101,40 @@ test.describe('the local-first promise', () => {
 
     await expect(page.getByText('From tab B').first()).toBeVisible({ timeout: 10_000 });
   });
+
+  test('a tab opened before the other one has saved does not erase its entry', async ({ page, context }) => {
+    /*
+     * The condition that lost data, forced rather than hoped for.
+     *
+     * Saves are debounced, and a browser slows timers in a tab that is not in
+     * front, so a second tab can easily open while the first tab's save is
+     * still waiting. Here that wait is stretched on purpose — tab A's save
+     * cannot land until well after tab B has loaded the old ledger. Tab B must
+     * then pick the entry up when it does land, and must not have written its
+     * own stale copy over it in the meantime.
+     */
+    await page.addInitScript(() => {
+      const real = window.setTimeout;
+      window.setTimeout = (fn, ms, ...rest) => real(fn, ms === 400 ? 2000 : ms, ...rest);
+    });
+    await startEmpty(page);
+    // Let onboarding's own save land, so the only thing in flight is the entry.
+    await page.waitForTimeout(2300);
+    await logEntry(page, { amount: 111, title: 'From tab A' });
+
+    const tabB = await context.newPage();
+    await tabB.goto('/');
+    // Loaded before the save: tab B genuinely starts without the entry.
+    expect(await persistedTitles(tabB)).toEqual([]);
+
+    await expect(tabB.getByText('From tab A').first()).toBeVisible();
+
+    // And it is still there once every pending timer has had its turn.
+    await tabB.waitForTimeout(1200);
+    expect(await persistedTitles(tabB)).toEqual(['From tab A']);
+    await expect(page.getByText('From tab A').first()).toBeVisible();
+    await expect(tabB.getByText('From tab A').first()).toBeVisible();
+  });
 });
 
 test.describe('with a full ledger', () => {
