@@ -7,12 +7,13 @@
  * be skipped and set later from Settings.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore, suggestBudgets } from '../lib/store';
 import { CURRENCIES, categoriesFor } from '../lib/data';
 import { buildDemo } from '../lib/demo';
 import { formatMoney } from '../lib/calc';
-import { Button, Card, Field, Icon, Input, MoneyInput, NumberInput, Select } from './ui';
+import { prefersReducedMotion } from '../lib/motion';
+import { Button, Field, Icon, Input, MoneyInput, NumberInput, Select } from './ui';
 
 const STEPS = ['You', 'Income', 'Budgets'];
 
@@ -38,6 +39,10 @@ export default function Onboarding() {
   };
 
   const finish = (withDemo = false) => {
+    // The app replaces this page in the same document, so it would otherwise
+    // open wherever this page had been scrolled to — Home, part-way down, with
+    // its greeting out of sight. Instant: the whole page is about to change.
+    window.scrollTo(0, 0);
     if (withDemo) {
       const demo = buildDemo({ income: profile.monthlyIncome || defaultIncome(profile.currency) });
       dispatch({
@@ -63,46 +68,74 @@ export default function Onboarding() {
     dispatch({ type: 'onboard', profile: { ...profile, monthlyIncome: profile.monthlyIncome || 0 } });
   };
 
-  return (
-    <div className="min-h-dvh grid place-items-center px-4 py-10">
-      <div className="w-full max-w-lg">
-        {/* Mark */}
-        <div className="flex items-center gap-3 mb-8">
-          <span className="size-11 rounded-2xl grid place-items-center metal">
-            <Icon name="chart" className="size-5" />
-          </span>
-          <div>
-            <div className="text-[19px] font-semibold display tracking-tight">CoinTrack</div>
-            <div className="text-[12.5px] text-faint">Earnings, expenses, savings and what you own</div>
-          </div>
-        </div>
+  /*
+   * Each step starts at its headline.
+   *
+   * The page is taller than a phone's screen, so Continue is often pressed
+   * after scrolling down — and without this the next step opened mid-page,
+   * with its headline already scrolled out of sight.
+   */
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }, [step]);
 
-        {/* Progress */}
-        <div className="flex items-center gap-2 mb-5">
+  return (
+    /*
+     * The first page anyone sees, set like the opening of a printed journal: a
+     * masthead, a kicker saying where you are, a large serif headline, and the
+     * form below it with no box around it — the page is the container.
+     */
+    <div className="min-h-dvh grid place-items-center px-5 py-12 sm:py-16">
+      <div className="w-full max-w-xl">
+        {/* Masthead */}
+        <header className="text-center mb-10">
+          <div className="inline-flex items-center gap-3">
+            <span className="size-9 rounded-xl grid place-items-center metal">
+              <Icon name="chart" className="size-[18px]" />
+            </span>
+            <span className="display text-[36px] leading-none">CoinTrack</span>
+          </div>
+          {/* Balanced, so a phone splits it into two even lines instead of
+              stranding "own" on a line of its own. */}
+          <div className="mt-3 text-[10.5px] uppercase tracking-[0.22em] text-faint text-balance">
+            Earnings, expenses, savings and what you own
+          </div>
+          {/* A double rule, the way a masthead is closed off. */}
+          <div className="mt-6 border-t border-[color:var(--border-strong)]" />
+          <div className="mt-[3px] border-t border-hair" />
+        </header>
+
+        {/* Where you are: a printed kicker over three rules. */}
+        <div className="flex items-baseline justify-between text-[10.5px] uppercase tracking-[0.2em] mb-2.5">
+          <span className="text-faint">Step {step + 1} of {STEPS.length}</span>
+          <span>{STEPS[step]}</span>
+        </div>
+        <div className="flex gap-1.5 mb-9" aria-hidden="true">
           {STEPS.map((s, i) => (
-            <div key={s} className="flex-1">
-              <div
-                className="h-1 rounded-full transition-all duration-500"
-                style={{ background: i <= step ? 'var(--metal)' : 'var(--border)' }}
-              />
-              <div className={`text-[10.5px] mt-1.5 ${i === step ? 'text-brandy font-medium' : 'text-faint'}`}>{s}</div>
-            </div>
+            <div
+              key={s}
+              className="flex-1 transition-all duration-500"
+              style={{
+                height: i === step ? 2 : 1,
+                background: i <= step ? 'var(--text)' : 'var(--border-strong)',
+              }}
+            />
           ))}
         </div>
 
-        <Card glow sheen className="p-6 animate-rise">
+        <div key={step} className="animate-rise">
           {step === 0 && (
             <>
-              <h1 className="text-[24px] font-semibold display leading-tight">
+              <h1 className="display text-[40px] sm:text-[48px] leading-[1.04] text-balance">
                 Let's set up your <span className="gradient-text">ledger</span>
               </h1>
-              <p className="text-[13.5px] text-dim mt-2 leading-relaxed">
+              <p className="text-[15px] text-dim mt-4 leading-relaxed max-w-[34rem]">
                 Everything stays on this device. No account, no sync, no server — the data lives in your
                 browser's storage and never leaves it, unless you choose to ask an AI model for guidance,
                 and then only a summary you see first.
               </p>
 
-              <div className="grid sm:grid-cols-2 gap-3 mt-6">
+              <div className="grid sm:grid-cols-2 gap-3 mt-9">
                 <Field label="What should we call you?">
                   <Input
                     value={profile.name}
@@ -139,7 +172,8 @@ export default function Onboarding() {
 
               <button
                 onClick={() => finish(true)}
-                className="w-full mt-3 text-[12.5px] text-dim hover:text-[color:var(--text)] transition-colors"
+                className="w-full mt-4 text-[13px] text-dim underline underline-offset-4 decoration-[color:var(--border-strong)]
+                           hover:text-[color:var(--text)] hover:decoration-[color:var(--text)] transition-colors"
               >
                 Or explore with five months of sample data first
               </button>
@@ -148,13 +182,15 @@ export default function Onboarding() {
 
           {step === 1 && (
             <>
-              <h1 className="text-[24px] font-semibold display leading-tight">What comes in each month?</h1>
-              <p className="text-[13.5px] text-dim mt-2 leading-relaxed">
+              <h1 className="display text-[40px] sm:text-[48px] leading-[1.04] text-balance">
+                What comes in <span className="gradient-text">each month?</span>
+              </h1>
+              <p className="text-[15px] text-dim mt-4 leading-relaxed max-w-[34rem]">
                 A rough take-home figure is enough. It is what turns your spending into a savings rate and
                 lets CoinTrack size sensible budgets — you can change it whenever it changes.
               </p>
 
-              <Field label="Monthly take-home" className="mt-6">
+              <Field label="Monthly take-home" className="mt-9">
                 <MoneyInput
                   value={profile.monthlyIncome}
                   onChange={(v) => patch({ monthlyIncome: v })}
@@ -208,7 +244,8 @@ export default function Onboarding() {
               </div>
               <button
                 onClick={() => finish(false)}
-                className="w-full mt-3 text-[12.5px] text-dim hover:text-[color:var(--text)] transition-colors"
+                className="w-full mt-4 text-[13px] text-dim underline underline-offset-4 decoration-[color:var(--border-strong)]
+                           hover:text-[color:var(--text)] hover:decoration-[color:var(--text)] transition-colors"
               >
                 Skip — I'll just log things for now
               </button>
@@ -217,8 +254,10 @@ export default function Onboarding() {
 
           {step === 2 && (
             <>
-              <h1 className="text-[24px] font-semibold display leading-tight">A starting point</h1>
-              <p className="text-[13.5px] text-dim mt-2 leading-relaxed">
+              <h1 className="display text-[40px] sm:text-[48px] leading-[1.04] text-balance">
+                A starting <span className="gradient-text">point</span>
+              </h1>
+              <p className="text-[15px] text-dim mt-4 leading-relaxed max-w-[34rem]">
                 Proposed from your income and your {profile.savingsTargetPct}% target. They add up to exactly
                 what is left after saving — adjust anything that looks wrong, or leave them and fix them once
                 you have a month of real data.
@@ -269,13 +308,19 @@ export default function Onboarding() {
               </div>
               <button
                 onClick={() => finish(true)}
-                className="w-full mt-3 text-[12.5px] text-dim hover:text-[color:var(--text)] transition-colors"
+                className="w-full mt-4 text-[13px] text-dim underline underline-offset-4 decoration-[color:var(--border-strong)]
+                           hover:text-[color:var(--text)] hover:decoration-[color:var(--text)] transition-colors"
               >
                 Start with sample data instead
               </button>
             </>
           )}
-        </Card>
+        </div>
+
+        {/* The small print, which here is the whole promise. */}
+        <p className="mt-14 text-center text-[10.5px] uppercase tracking-[0.2em] text-faint">
+          Kept on this device · No account · No server
+        </p>
       </div>
     </div>
   );

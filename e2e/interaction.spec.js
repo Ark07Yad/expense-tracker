@@ -94,9 +94,20 @@ test('a card follows the pointer with its spotlight', async ({ page }) => {
   await startWithSampleData(page);
   const card = page.locator('[data-spot]').first();
   const box = await card.boundingBox();
-  await page.mouse.move(box.x + 60, box.y + 40);
-  await page.mouse.move(box.x + 120, box.y + 50);
-  await expect.poll(() => card.evaluate((el) => el.style.getPropertyValue('--mx'))).toBe('120px');
+  const x = Math.round(box.x);
+  const y = Math.round(box.y);
+  await page.mouse.move(x + 60, y + 40);
+  await page.mouse.move(x + 120, y + 50);
+
+  // Within a pixel, not exactly 120: the centred column can sit on a half
+  // pixel, and Firefox reports pointer positions in whole pixels, so the true
+  // answer there is 119.5. Demanding "120px" made this fail under load.
+  await expect
+    .poll(async () => {
+      const mx = parseFloat(await card.evaluate((el) => el.style.getPropertyValue('--mx')));
+      return Number.isFinite(mx) && Math.abs(mx - (x + 120 - box.x)) <= 1;
+    })
+    .toBe(true);
 });
 
 test.describe('with reduced motion', () => {

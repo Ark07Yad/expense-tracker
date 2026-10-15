@@ -271,3 +271,28 @@ test.describe('budgets and advice', () => {
     await expect(page.locator('main')).toContainText(/blown/);
   });
 });
+
+test.describe('onboarding on a short screen', () => {
+  // Short enough that every step's buttons sit below the fold, so reaching
+  // them means scrolling — which is when the next screen used to open
+  // part-way down.
+  test.use({ viewport: { width: 1280, height: 560 } });
+
+  test('each step, and the app after it, opens at the top', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /^Continue/ }).click();
+    await expect(page.getByRole('heading', { name: /What comes in each month/ })).toBeInViewport();
+
+    await page.getByRole('button', { name: /Skip —/ }).click();
+    await expect(page.getByRole('heading', { name: /Good |Still up/ })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(page.getByRole('heading', { name: /Good |Still up/ })).toBeInViewport();
+  });
+
+  test('starting with sample data opens Home at the top too', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /sample data first/ }).click();
+    await expect(page.getByRole('heading', { name: /Good |Still up/ })).toBeVisible();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+});
