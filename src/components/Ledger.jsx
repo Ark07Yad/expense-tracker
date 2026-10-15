@@ -530,7 +530,7 @@ function AttachmentViewer({ entry, onClose }) {
                   <p className="text-[12.5px] text-dim p-4">This browser cannot preview PDFs inline.</p>
                 </object>
               ) : (
-                <img src={url} alt={a.name} className="w-full max-h-[60vh] object-contain bg-black/20" />
+                <img src={url} alt={a.name} className="w-full max-h-[60vh] object-contain [background:var(--surface-2)]" />
               )}
             </div>
           );

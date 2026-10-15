@@ -19,8 +19,7 @@ import SectionTips from './SectionTips';
 /* Carries the AI provider code, so only when someone asks. */
 const AiAdvisor = lazy(() => import('./AiAdvisor'));
 import {
-  Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money,
-  MoneyInput, NumberInput, SectionTitle, Select, Sheet,
+  Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money, MoneyInput, NumberInput, PageHeader, SectionTitle, Select, Sheet,
 } from './ui';
 
 export default function Settings({ toast, onNavigate }) {
@@ -125,6 +124,7 @@ export default function Settings({ toast, onNavigate }) {
 
   return (
     <div className="space-y-5">
+      <PageHeader title="Settings" dek="Your profile, your budgets, and the data itself." />
       {/* ── Profile ── */}
       <Card className="p-5">
         <SectionTitle icon="user" sub="Only ever stored on this device">Profile</SectionTitle>

@@ -469,7 +469,7 @@ export function RecurringSheet({ open, editing, onClose, onSaved }) {
             noneLabel="General savings"
             selected={draft.goalId}
             onSelect={(v) => patch({ goalId: v })}
-            options={goals.map((g) => ({ id: g.id, name: g.name, icon: 'target', color: '#38bdf8' }))}
+            options={goals.map((g) => ({ id: g.id, name: g.name, icon: 'target', color: '#4f7ba7' }))}
           />
         )}
 

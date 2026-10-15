@@ -87,7 +87,7 @@ export default function Dashboard({ onNavigate }) {
   const donut = f.expenseCats.slice(0, 6);
   const donutOther = f.expenseCats.slice(6).reduce((s, c) => s + c.total, 0);
   const donutData = donutOther > 0
-    ? [...donut, { id: 'other', label: 'Everything else', total: donutOther, color: '#64748b' }]
+    ? [...donut, { id: 'other', label: 'Everything else', total: donutOther, color: '#7c776c' }]
     : donut;
 
   return (
@@ -307,7 +307,7 @@ export default function Dashboard({ onNavigate }) {
                   </span>
                   <span className="text-[11px] uppercase tracking-wider text-faint">{t.tone === 'bad' ? 'Needs attention' : t.tone === 'warn' ? 'Heads up' : 'Note'}</span>
                 </div>
-                <div className="text-[13.5px] font-semibold leading-snug">{t.title}</div>
+                <div className="display text-[19px] leading-snug">{t.title}</div>
                 <p className="text-[12px] text-dim mt-1.5 leading-relaxed line-clamp-3">{t.body}</p>
               </button>
             ))}

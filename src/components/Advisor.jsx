@@ -20,8 +20,7 @@ import { categoryById } from '../lib/data';
 import { formatPercent } from '../lib/calc';
 import SuggestionCard from './SuggestionCard';
 import {
-  Button, Card, Empty, Icon, IconButton, Money,
-  SectionTitle, Textarea, stagger,
+  Button, Card, Empty, Icon, IconButton, Money, PageHeader, SectionTitle, stagger, Textarea,
 } from './ui';
 
 export default function Advisor({ section, setSection, onNavigate, toast }) {
@@ -53,6 +52,7 @@ export default function Advisor({ section, setSection, onNavigate, toast }) {
 
   return (
     <div className="space-y-5">
+      <PageHeader title="Advice" dek="Suggestions worked out from your own entries — each one names a figure you can check." />
       {/* ── Section picker ── */}
       <Card className="p-5">
         <SectionTitle icon="compass" sub="Pick a part of your finances to look at">

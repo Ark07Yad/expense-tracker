@@ -35,7 +35,7 @@ export default function SuggestionCard({ s, index = 0, onAction, onDismiss }) {
               {TONE_LABEL[s.tone]}
             </Badge>
           </div>
-          <h3 className="text-[14px] font-semibold leading-snug">{s.title}</h3>
+          <h3 className="display text-[21px] leading-snug">{s.title}</h3>
           <p className="text-[12.5px] text-dim mt-1.5 leading-relaxed">{s.body}</p>
 
           {s.action && onAction && (

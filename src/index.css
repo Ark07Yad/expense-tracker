@@ -285,7 +285,7 @@ body {
     border-radius: 99px;
     background: var(--metal);
     border: 2px solid var(--bg);
-    box-shadow: 0 0 0 1px var(--border-strong), 0 4px 12px rgb(118 69 245 / 0.5);
+    box-shadow: 0 0 0 1px var(--border-strong), 0 1px 3px rgb(29 28 26 / 0.25);
     transition: transform 0.15s ease;
   }
   input[type='range']::-webkit-slider-thumb:active { transform: scale(1.18); }

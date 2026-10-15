@@ -428,7 +428,7 @@ export default function EntrySheet({ open, onClose, editing = null, defaultDate,
                     onClick={() => patch({ goalId: g.id })}
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12.5px] font-medium
                                 transition-all active:scale-95 border
-                                ${active ? 'bg-sky-500/18 border-sky-400/50 text-save' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
+                                ${active ? 'bg-[color-mix(in_srgb,var(--tone-save)_12%,transparent)] border-[color-mix(in_srgb,var(--tone-save)_45%,transparent)] text-save' : 'surface border-hair text-dim hover:text-[color:var(--text)]'}`}
                   >
                     <Icon name="target" className="size-3.5" />
                     {g.name}

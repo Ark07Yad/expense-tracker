@@ -127,6 +127,25 @@ export function Card({ className = '', children, glow = false, sheen = false, ..
   );
 }
 
+/**
+ * The top of a screen: its name in the serif, and one line saying what it is for.
+ *
+ * Home opens with a greeting and Invest with a headline; the other screens used
+ * to open straight into their first section, so the app read as a set of
+ * panels rather than as one publication. Every screen now opens the same way.
+ */
+export function PageHeader({ title, dek, action }) {
+  return (
+    <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 pb-2">
+      <div className="min-w-0">
+        <h1 className="display text-[36px] sm:text-[42px] leading-[1.04] text-balance">{title}</h1>
+        {dek && <p className="text-[14px] text-dim mt-2">{dek}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </header>
+  );
+}
+
 export function SectionTitle({ icon, children, action, sub }) {
   return (
     /*
@@ -158,7 +177,7 @@ const VARIANTS = {
   primary: 'metal hover:opacity-90 font-medium',
   ghost: 'surface hover:[background:var(--surface-hover)] text-[color:var(--text)]',
   subtle: 'bg-transparent hover:[background:var(--surface)] text-dim hover:text-[color:var(--text)]',
-  danger: 'bg-rose-500/12 text-bad hover:bg-rose-500/20 border border-rose-500/25',
+  danger: 'bg-[color-mix(in_srgb,var(--tone-bad)_10%,transparent)] text-bad border border-[color-mix(in_srgb,var(--tone-bad)_30%,transparent)] hover:bg-[color-mix(in_srgb,var(--tone-bad)_16%,transparent)]',
 };
 
 export function Button({ variant = 'ghost', className = '', size = 'md', children, ...rest }) {
@@ -609,7 +628,7 @@ export function Ring({ value, max, size = 190, stroke = 9, children, tone = 'bra
  * Horizontal bar with a pace marker.
  *
  * `overTone` decides what passing the target means. For a budget it is bad and
- * the fill turns amber-to-red; for a savings rate, beating the target is the
+ * the fill turns to the theme's warning tone; for a savings rate, beating the target is the
  * whole point, so the bar has to be told rather than assuming.
  */
 export function Bar({
@@ -802,7 +821,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
         <div aria-hidden="true" className="sm:hidden mx-auto mt-2 h-1 w-9 rounded-full shrink-0" style={{ background: 'var(--border-strong)' }} />
         <div className="flex items-start justify-between gap-4 px-5 pt-3 sm:pt-5 pb-4 border-b border-hair shrink-0">
           <div className="min-w-0">
-            <h3 id={titleId} className="text-lg font-semibold truncate">{title}</h3>
+            <h3 id={titleId} className="display text-[25px] leading-tight truncate">{title}</h3>
             {subtitle && <p className="text-[12.5px] text-dim mt-0.5">{subtitle}</p>}
           </div>
           <IconButton name="x" label="Close" onClick={onClose} />

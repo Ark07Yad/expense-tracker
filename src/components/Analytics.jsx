@@ -23,8 +23,7 @@ import { monthlyBreakdown, useFinance } from '../lib/useFinance';
 import { PERIODS, addDays, dayLabel, formatMoney, formatPercent, parseKey, todayKey } from '../lib/calc';
 import { categoriesFor, categoryById } from '../lib/data';
 import {
-  Badge, Bar, Button, Card, CategoryDot, Delta, Empty, Icon, IconButton, Money,
-  SectionTitle, Segmented, Select, Stat, stagger, tooltipStyle,
+  Badge, Bar, Button, Card, CategoryDot, Delta, Empty, Icon, IconButton, Money, PageHeader, SectionTitle, Segmented, Select, stagger, Stat, tooltipStyle,
 } from './ui';
 
 const VIEWS = [
@@ -67,6 +66,7 @@ export default function Analytics({ onNavigate }) {
 
   return (
     <div className="space-y-5">
+      <PageHeader title="Trends" dek="Where money came from and where it went, by week, month, quarter or year." />
       {/* ── Controls ── */}
       <Card className="p-5">
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
