@@ -147,8 +147,8 @@ export default function Investments({ toast, onNavigate }) {
                 <AreaChart data={inv.series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <defs>
                     <linearGradient id="invWorth" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.16} />
-                      <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.02} />
+                      <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.09} />
+                      <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.09} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -164,11 +164,11 @@ export default function Investments({ toast, onNavigate }) {
                     formatter={(v, n) => [formatMoney(v, cur), n === 'invested' ? 'Paid in' : n === 'gain' ? 'Gain' : 'Value']}
                   />
                   <Area
-                    type="monotone" dataKey="value" stroke="var(--tone-invest)" strokeWidth={2.4}
+                    type="monotone" dataKey="value" stroke="var(--tone-invest)" strokeWidth={1.75}
                     fill="url(#invWorth)" {...chartMotion(0)}
                   />
                   <Line
-                    type="monotone" dataKey="invested" stroke="var(--text-faint)" strokeWidth={1.6}
+                    type="monotone" dataKey="invested" stroke="var(--text-faint)" strokeWidth={1.5}
                     strokeDasharray="5 4" dot={false} {...chartMotion(1)}
                   />
                 </AreaChart>
@@ -205,7 +205,7 @@ export default function Investments({ toast, onNavigate }) {
                   <PieChart>
                     <Pie
                       data={inv.byClass} dataKey="value" nameKey="label"
-                      innerRadius="60%" outerRadius="95%" paddingAngle={2} stroke="none" {...chartMotion(0)}
+                      innerRadius="74%" outerRadius="95%" paddingAngle={1.5} stroke="none" {...chartMotion(0)}
                     >
                       {inv.byClass.map((c) => <Cell key={c.id} fill={c.color} />)}
                     </Pie>

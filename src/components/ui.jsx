@@ -437,7 +437,7 @@ export function Chip({ active, color, children, className = '', ...rest }) {
                   ${active
                     ? 'text-[color:var(--text)]'
                     : 'surface border-hair text-dim hover:text-[color:var(--text)]'} ${className}`}
-      style={active ? { background: `${color || '#8e6bff'}26`, borderColor: `${color || '#8e6bff'}66` } : undefined}
+      style={active ? { background: `${color || '#7c776c'}26`, borderColor: `${color || '#7c776c'}66` } : undefined}
       {...rest}
     >
       {children}
@@ -545,7 +545,7 @@ export function Stat({ label, value, icon, tone = 'default', sub, delta, invertD
  * now", which is what makes a half-full ring readable on the 5th and on the
  * 25th.
  */
-export function Ring({ value, max, size = 190, stroke = 13, children, tone = 'brand', pace = null }) {
+export function Ring({ value, max, size = 190, stroke = 9, children, tone = 'brand', pace = null }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const raw = max > 0 ? value / max : 0;
@@ -899,15 +899,18 @@ export function Empty({ icon = 'ledger', title, body, action }) {
 export function Badge({ tone = 'neutral', children, className = '' }) {
   const tones = {
     neutral: '[background:var(--border)] text-dim border-hair',
-    good: 'bg-emerald-500/14 text-good border-emerald-400/25',
-    warn: 'bg-amber-500/14 text-warn border-amber-400/25',
-    bad: 'bg-rose-500/14 text-bad border-rose-400/25',
-    info: 'bg-sky-500/14 text-info border-sky-400/25',
-    brand: 'bg-brand-500/16 text-brandy border-brand-400/30',
-    earn: 'bg-emerald-500/14 text-earn border-emerald-400/25',
-    spend: 'bg-rose-500/14 text-spend border-rose-400/25',
-    save: 'bg-sky-500/14 text-save border-sky-400/25',
-    invest: 'bg-amber-500/14 text-invest border-amber-400/25',
+    /* Tinted from the theme's own tones, so a badge sits in the same muted
+       palette as the charts instead of being the last neon on the page. Written
+       out in full: Tailwind cannot see a class name assembled at runtime. */
+    good: 'bg-[color-mix(in_srgb,var(--tone-good)_12%,transparent)] text-good border-[color-mix(in_srgb,var(--tone-good)_32%,transparent)]',
+    warn: 'bg-[color-mix(in_srgb,var(--tone-warn)_12%,transparent)] text-warn border-[color-mix(in_srgb,var(--tone-warn)_32%,transparent)]',
+    bad: 'bg-[color-mix(in_srgb,var(--tone-bad)_12%,transparent)] text-bad border-[color-mix(in_srgb,var(--tone-bad)_32%,transparent)]',
+    info: 'bg-[color-mix(in_srgb,var(--tone-info)_12%,transparent)] text-info border-[color-mix(in_srgb,var(--tone-info)_32%,transparent)]',
+    brand: 'bg-[color-mix(in_srgb,var(--tone-brand)_10%,transparent)] text-brandy border-[color-mix(in_srgb,var(--tone-brand)_28%,transparent)]',
+    earn: 'bg-[color-mix(in_srgb,var(--tone-earn)_12%,transparent)] text-earn border-[color-mix(in_srgb,var(--tone-earn)_32%,transparent)]',
+    spend: 'bg-[color-mix(in_srgb,var(--tone-spend)_12%,transparent)] text-spend border-[color-mix(in_srgb,var(--tone-spend)_32%,transparent)]',
+    save: 'bg-[color-mix(in_srgb,var(--tone-save)_12%,transparent)] text-save border-[color-mix(in_srgb,var(--tone-save)_32%,transparent)]',
+    invest: 'bg-[color-mix(in_srgb,var(--tone-invest)_12%,transparent)] text-invest border-[color-mix(in_srgb,var(--tone-invest)_32%,transparent)]',
   };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${tones[tone]} ${className}`}>
@@ -961,10 +964,14 @@ export function CategoryDot({ color, icon, size = 'md', className = '' }) {
 
 /** Tooltip styling shared by every recharts surface in the app. */
 export const tooltipStyle = {
+  /* A printed note pinned to the chart: paper, a hairline in ink, square-ish
+     corners, no shadow, and figures that line up. */
   background: 'var(--bg-elev)',
-  border: '1px solid var(--border)',
-  borderRadius: 10,
+  border: '1px solid var(--border-strong)',
+  borderRadius: 4,
   fontSize: 12,
-  padding: '8px 10px',
-  boxShadow: 'var(--shadow-pop)',
+  fontFamily: 'var(--font-sans)',
+  fontVariantNumeric: 'tabular-nums',
+  padding: '8px 12px',
+  boxShadow: 'none',
 };

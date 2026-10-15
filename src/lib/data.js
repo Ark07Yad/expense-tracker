@@ -81,41 +81,52 @@ export const prefixFor = (kind) => KIND_PREFIX[kind] ?? '−';
  * (a housing figure near 30%, groceries near 10%), not advice — every one of
  * them is editable, and the app never silently re-applies them afterwards.
  */
+/*
+ * Category colours — the Paper palette.
+ *
+ * Muted, earthy tones (clay, brick, ochre, olive, sage, pine, slate, indigo,
+ * plum, stone) rather than saturated screen colours, so a donut or a list of
+ * category icons reads as ink on paper. Each was solved for lightness, not
+ * picked: these are drawn as icons and chart marks on *both* the ivory page and
+ * the charcoal one, and every colour holds at least 3.7:1 against all four
+ * backgrounds — above the 3:1 that graphics need. Hue and saturation set the
+ * character; lightness is fixed by that constraint.
+ */
 export const CATEGORIES = {
   expense: [
-    { id: 'housing',       label: 'Rent & Housing',   icon: 'home',      color: '#f472b6', share: 0.28 },
-    { id: 'groceries',     label: 'Groceries',        icon: 'basket',    color: '#fb923c', share: 0.10 },
-    { id: 'dining',        label: 'Food & Dining',    icon: 'cup',       color: '#f43f5e', share: 0.06 },
-    { id: 'transport',     label: 'Transport',        icon: 'car',       color: '#38bdf8', share: 0.06 },
-    { id: 'utilities',     label: 'Bills & Utilities',icon: 'bolt',      color: '#facc15', share: 0.05 },
-    { id: 'health',        label: 'Health',           icon: 'heart',     color: '#4ade80', share: 0.04 },
-    { id: 'shopping',      label: 'Shopping',         icon: 'bag',       color: '#c084fc', share: 0.05 },
-    { id: 'entertainment', label: 'Entertainment',    icon: 'play',      color: '#a78bfa', share: 0.03 },
-    { id: 'subscriptions', label: 'Subscriptions',    icon: 'repeat',    color: '#22d3ee', share: 0.02 },
-    { id: 'education',     label: 'Education',        icon: 'book',      color: '#60a5fa', share: 0.03 },
-    { id: 'travel',        label: 'Travel',           icon: 'plane',     color: '#2dd4bf', share: 0.03 },
-    { id: 'family',        label: 'Family & Gifts',   icon: 'gift',      color: '#f9a8d4', share: 0.02 },
-    { id: 'debt',          label: 'Loan & EMI',       icon: 'bank',      color: '#fb7185', share: 0.00 },
-    { id: 'other-expense', label: 'Other',            icon: 'dots',      color: '#94a3b8', share: 0.02 },
+    { id: 'housing',       label: 'Rent & Housing',   icon: 'home',      color: '#b16248', share: 0.28 },
+    { id: 'groceries',     label: 'Groceries',        icon: 'basket',    color: '#737d35', share: 0.10 },
+    { id: 'dining',        label: 'Food & Dining',    icon: 'cup',       color: '#b95963', share: 0.06 },
+    { id: 'transport',     label: 'Transport',        icon: 'car',       color: '#4f7ba7', share: 0.06 },
+    { id: 'utilities',     label: 'Bills & Utilities',icon: 'bolt',      color: '#977026', share: 0.05 },
+    { id: 'health',        label: 'Health',           icon: 'heart',     color: '#4f8260', share: 0.04 },
+    { id: 'shopping',      label: 'Shopping',         icon: 'bag',       color: '#9168a4', share: 0.05 },
+    { id: 'entertainment', label: 'Entertainment',    icon: 'play',      color: '#98698d', share: 0.03 },
+    { id: 'subscriptions', label: 'Subscriptions',    icon: 'repeat',    color: '#398282', share: 0.02 },
+    { id: 'education',     label: 'Education',        icon: 'book',      color: '#6a73b2', share: 0.03 },
+    { id: 'travel',        label: 'Travel',           icon: 'plane',     color: '#4a8172', share: 0.03 },
+    { id: 'family',        label: 'Family & Gifts',   icon: 'gift',      color: '#b25d71', share: 0.02 },
+    { id: 'debt',          label: 'Loan & EMI',       icon: 'bank',      color: '#a76837', share: 0.00 },
+    { id: 'other-expense', label: 'Other',            icon: 'dots',      color: '#7c776c', share: 0.02 },
   ],
   earning: [
-    { id: 'salary',        label: 'Salary',           icon: 'wallet',    color: '#10b981' },
-    { id: 'freelance',     label: 'Freelance',        icon: 'laptop',    color: '#34d399' },
-    { id: 'business',      label: 'Business',         icon: 'store',     color: '#6ee7b7' },
-    { id: 'interest',      label: 'Interest',         icon: 'percent',   color: '#22d3ee' },
-    { id: 'dividend',      label: 'Dividends',        icon: 'coins',     color: '#a3e635' },
-    { id: 'rental',        label: 'Rental income',    icon: 'key',       color: '#4ade80' },
-    { id: 'refund',        label: 'Refund',           icon: 'undo',      color: '#94a3b8' },
-    { id: 'gift-in',       label: 'Gift received',    icon: 'gift',      color: '#f9a8d4' },
-    { id: 'other-earning', label: 'Other',            icon: 'dots',      color: '#94a3b8' },
+    { id: 'salary',        label: 'Salary',           icon: 'wallet',    color: '#3c855b' },
+    { id: 'freelance',     label: 'Freelance',        icon: 'laptop',    color: '#4f8260' },
+    { id: 'business',      label: 'Business',         icon: 'store',     color: '#657f4b' },
+    { id: 'interest',      label: 'Interest',         icon: 'percent',   color: '#398282' },
+    { id: 'dividend',      label: 'Dividends',        icon: 'coins',     color: '#737d35' },
+    { id: 'rental',        label: 'Rental income',    icon: 'key',       color: '#4a8172' },
+    { id: 'refund',        label: 'Refund',           icon: 'undo',      color: '#7c776c' },
+    { id: 'gift-in',       label: 'Gift received',    icon: 'gift',      color: '#b25d71' },
+    { id: 'other-earning', label: 'Other',            icon: 'dots',      color: '#7c776c' },
   ],
   saving: [
-    { id: 'emergency',     label: 'Emergency fund',   icon: 'shield',    color: '#38bdf8' },
-    { id: 'goal',          label: 'Goal savings',     icon: 'target',    color: '#0ea5e9' },
-    { id: 'retirement',    label: 'Retirement',       icon: 'hourglass', color: '#818cf8' },
-    { id: 'invest-transfer', label: 'To investments', icon: 'chart',     color: '#fbbf24' },
-    { id: 'debt-payoff',   label: 'Extra debt payoff',icon: 'bank',      color: '#2dd4bf' },
-    { id: 'other-saving',  label: 'Other',            icon: 'dots',      color: '#94a3b8' },
+    { id: 'emergency',     label: 'Emergency fund',   icon: 'shield',    color: '#4f7ba7' },
+    { id: 'goal',          label: 'Goal savings',     icon: 'target',    color: '#6a73b2' },
+    { id: 'retirement',    label: 'Retirement',       icon: 'hourglass', color: '#9168a4' },
+    { id: 'invest-transfer', label: 'To investments', icon: 'chart',     color: '#977026' },
+    { id: 'debt-payoff',   label: 'Extra debt payoff',icon: 'bank',      color: '#4a8172' },
+    { id: 'other-saving',  label: 'Other',            icon: 'dots',      color: '#7c776c' },
   ],
 };
 
@@ -133,7 +144,7 @@ const CATEGORY_INDEX = Object.fromEntries(
 
 /** Never returns undefined — a deleted or renamed category still renders. */
 export const categoryById = (id) =>
-  CATEGORY_INDEX[id] || { id, label: 'Uncategorised', icon: 'dots', color: '#94a3b8' };
+  CATEGORY_INDEX[id] || { id, label: 'Uncategorised', icon: 'dots', color: '#7c776c' };
 
 /* ────────────────────────────── Asset classes ────────────────────────────── */
 
@@ -143,14 +154,14 @@ export const categoryById = (id) =>
  * dressed up as a volatility figure it has not earned.
  */
 export const ASSET_CLASSES = [
-  { id: 'equity',   label: 'Stocks',        icon: 'chart',   color: '#8e6bff', risk: 4 },
-  { id: 'fund',     label: 'Mutual funds',  icon: 'layers',  color: '#38bdf8', risk: 3 },
-  { id: 'retire',   label: 'Retirement',    icon: 'hourglass', color: '#818cf8', risk: 3 },
-  { id: 'bond',     label: 'Bonds & FDs',   icon: 'bank',    color: '#34d399', risk: 1 },
-  { id: 'gold',     label: 'Gold',          icon: 'coins',   color: '#fbbf24', risk: 2 },
-  { id: 'crypto',   label: 'Crypto',        icon: 'spark',   color: '#fb7185', risk: 5 },
-  { id: 'property', label: 'Property',      icon: 'home',    color: '#2dd4bf', risk: 3 },
-  { id: 'cash',     label: 'Cash & liquid', icon: 'wallet',  color: '#94a3b8', risk: 0 },
+  { id: 'equity',   label: 'Stocks',        icon: 'chart',   color: '#9168a4', risk: 4 },
+  { id: 'fund',     label: 'Mutual funds',  icon: 'layers',  color: '#4f7ba7', risk: 3 },
+  { id: 'retire',   label: 'Retirement',    icon: 'hourglass', color: '#6a73b2', risk: 3 },
+  { id: 'bond',     label: 'Bonds & FDs',   icon: 'bank',    color: '#4f8260', risk: 1 },
+  { id: 'gold',     label: 'Gold',          icon: 'coins',   color: '#977026', risk: 2 },
+  { id: 'crypto',   label: 'Crypto',        icon: 'spark',   color: '#b95963', risk: 5 },
+  { id: 'property', label: 'Property',      icon: 'home',    color: '#b16248', risk: 3 },
+  { id: 'cash',     label: 'Cash & liquid', icon: 'wallet',  color: '#7c776c', risk: 0 },
 ];
 
 /**
@@ -161,13 +172,13 @@ export const ASSET_CLASSES = [
  * advice for the two is not the same.
  */
 export const DEBT_CLASSES = [
-  { id: 'mortgage', label: 'Mortgage', icon: 'home', color: '#f472b6', revolving: false },
-  { id: 'card', label: 'Credit card', icon: 'wallet', color: '#fb7185', revolving: true },
-  { id: 'personal', label: 'Personal loan', icon: 'bank', color: '#fb923c', revolving: false },
-  { id: 'car', label: 'Car loan', icon: 'car', color: '#38bdf8', revolving: false },
-  { id: 'student', label: 'Student loan', icon: 'book', color: '#a78bfa', revolving: false },
-  { id: 'overdraft', label: 'Overdraft', icon: 'drop', color: '#facc15', revolving: true },
-  { id: 'other-debt', label: 'Other', icon: 'dots', color: '#94a3b8', revolving: false },
+  { id: 'mortgage', label: 'Mortgage', icon: 'home', color: '#b16248', revolving: false },
+  { id: 'card', label: 'Credit card', icon: 'wallet', color: '#b95963', revolving: true },
+  { id: 'personal', label: 'Personal loan', icon: 'bank', color: '#a76837', revolving: false },
+  { id: 'car', label: 'Car loan', icon: 'car', color: '#4f7ba7', revolving: false },
+  { id: 'student', label: 'Student loan', icon: 'book', color: '#98698d', revolving: false },
+  { id: 'overdraft', label: 'Overdraft', icon: 'drop', color: '#977026', revolving: true },
+  { id: 'other-debt', label: 'Other', icon: 'dots', color: '#7c776c', revolving: false },
 ];
 
 export const debtClassById = (id) =>

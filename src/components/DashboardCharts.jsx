@@ -23,8 +23,8 @@ export function SpendTrend({ data, cur }) {
         <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="dashSpend" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.16} />
-              <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.02} />
+              <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.09} />
+              <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.09} />
             </linearGradient>
           </defs>
           <XAxis dataKey="label" axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={26} />
@@ -44,7 +44,7 @@ export function SpendTrend({ data, cur }) {
             type="monotone"
             dataKey="value"
             stroke="var(--color-brand-400)"
-            strokeWidth={1.6}
+            strokeWidth={1.5}
             fill="url(#dashSpend)"
           />
           <Area
@@ -52,7 +52,7 @@ export function SpendTrend({ data, cur }) {
             type="monotone"
             dataKey="avg"
             stroke="var(--tone-invest)"
-            strokeWidth={2.2}
+            strokeWidth={1.75}
             strokeDasharray="5 4"
             fill="none"
           />
@@ -71,9 +71,9 @@ export function CategoryDonut({ data, cur }) {
           data={data}
           dataKey="total"
           nameKey="label"
-          innerRadius="62%"
+          innerRadius="74%"
           outerRadius="94%"
-          paddingAngle={2}
+          paddingAngle={1.5}
           stroke="none"
           {...chartMotion(0)}
         >
@@ -97,8 +97,8 @@ export function NetWorthSpark({ data, cur }) {
           <YAxis hide domain={[(min) => Math.max(0, min * 0.88), (max) => max * 1.04]} />
           <defs>
             <linearGradient id="dashWorth" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.16} />
-              <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.02} />
+              <stop offset="0%" stopColor="var(--tone-invest)" stopOpacity={0.09} />
+              <stop offset="100%" stopColor="var(--tone-invest)" stopOpacity={0.09} />
             </linearGradient>
           </defs>
           <Tooltip
@@ -111,7 +111,7 @@ export function NetWorthSpark({ data, cur }) {
             type="monotone"
             dataKey="value"
             stroke="var(--tone-invest)"
-            strokeWidth={2}
+            strokeWidth={1.5}
             fill="url(#dashWorth)"
           />
           <Area

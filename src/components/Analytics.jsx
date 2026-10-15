@@ -59,7 +59,7 @@ export default function Analytics({ onNavigate }) {
   const donutData = useMemo(() => {
     const top = f.expenseCats.slice(0, 7);
     const rest = f.expenseCats.slice(7).reduce((s, c) => s + c.total, 0);
-    return rest > 0 ? [...top, { id: 'other', label: 'Everything else', total: rest, color: '#64748b', share: 0 }] : top;
+    return rest > 0 ? [...top, { id: 'other', label: 'Everything else', total: rest, color: '#7c776c', share: 0 }] : top;
   }, [f.expenseCats]);
 
   const p = PERIODS.find((x) => x.id === period);
@@ -221,24 +221,24 @@ export default function Analytics({ onNavigate }) {
                       formatter={(v, n) => [formatMoney(Math.abs(v), cur), LABELS[n] || n]}
                     />
                     <ReferenceLine y={0} stroke="var(--border-strong)" />
-                    <RBar dataKey="earning" stackId="flow" fill="var(--tone-earn)" radius={[4, 4, 0, 0]} {...chartMotion(0)} />
-                    <RBar dataKey="expenseNeg" stackId="flow" fill="var(--tone-spend)" radius={[0, 0, 4, 4]} {...chartMotion(1)} />
-                    <RBar dataKey="savingNeg" stackId="flow" fill="var(--tone-save)" radius={[0, 0, 4, 4]} {...chartMotion(2)} />
+                    <RBar dataKey="earning" stackId="flow" fill="var(--tone-earn)" radius={[1, 1, 0, 0]} {...chartMotion(0)} />
+                    <RBar dataKey="expenseNeg" stackId="flow" fill="var(--tone-spend)" radius={[0, 0, 1, 1]} {...chartMotion(1)} />
+                    <RBar dataKey="savingNeg" stackId="flow" fill="var(--tone-save)" radius={[0, 0, 1, 1]} {...chartMotion(2)} />
                     <Line
-                      type="monotone" dataKey="cumNet" stroke="var(--color-brand-300)" strokeWidth={2.4}
+                      type="monotone" dataKey="cumNet" stroke="var(--color-brand-300)" strokeWidth={1.75}
                       dot={false} {...chartMotion(3)}
                     />
                     <Legend
                       formatter={(n) => <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{LABELS[n] || n}</span>}
-                      iconType="circle" iconSize={7}
+                      iconType="square" iconSize={8}
                     />
                   </ComposedChart>
                 ) : view === 'cumulative' ? (
                   <AreaChart data={cumulative} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                     <defs>
                       <linearGradient id="anCum" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.16} />
-                        <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.02} />
+                        <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.09} />
+                        <stop offset="100%" stopColor="var(--color-brand-400)" stopOpacity={0.09} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -253,18 +253,18 @@ export default function Analytics({ onNavigate }) {
                       formatter={(v, n) => [formatMoney(v, cur), LABELS[n] || n]}
                     />
                     <Area
-                      type="monotone" dataKey="cumExpense" stroke="var(--color-brand-400)" strokeWidth={2.4}
+                      type="monotone" dataKey="cumExpense" stroke="var(--color-brand-400)" strokeWidth={1.75}
                       fill="url(#anCum)" {...chartMotion(0)}
                     />
                     {budgetTotal > 0 && (
                       <Line
-                        type="linear" dataKey="pace" stroke="var(--tone-warn)" strokeWidth={1.8}
+                        type="linear" dataKey="pace" stroke="var(--tone-warn)" strokeWidth={1.5}
                         strokeDasharray="6 5" dot={false} {...chartMotion(1)}
                       />
                     )}
                     <Legend
                       formatter={(n) => <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{LABELS[n] || n}</span>}
-                      iconType="circle" iconSize={7}
+                      iconType="square" iconSize={8}
                     />
                   </AreaChart>
                 ) : (
@@ -286,13 +286,13 @@ export default function Analytics({ onNavigate }) {
                         dataKey={c.label}
                         stackId="mix"
                         fill={c.color}
-                        radius={i === arr.length - 1 ? [4, 4, 0, 0] : 0}
+                        radius={i === arr.length - 1 ? [1, 1, 0, 0] : 0}
                         {...chartMotion(0)}
                       />
                     ))}
                     <Legend
                       formatter={(n) => <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{n}</span>}
-                      iconType="circle" iconSize={7}
+                      iconType="square" iconSize={8}
                     />
                   </BarChart>
                 )}
@@ -327,7 +327,7 @@ export default function Analytics({ onNavigate }) {
                   <PieChart>
                     <Pie
                       data={donutData} dataKey="total" nameKey="label"
-                      innerRadius="60%" outerRadius="95%" paddingAngle={2} stroke="none" {...chartMotion(0)}
+                      innerRadius="74%" outerRadius="95%" paddingAngle={1.5} stroke="none" {...chartMotion(0)}
                     >
                       {donutData.map((c) => <Cell key={c.id} fill={c.color} />)}
                     </Pie>

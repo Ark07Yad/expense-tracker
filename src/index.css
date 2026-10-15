@@ -455,9 +455,20 @@ body {
   [data-spot]:hover::after { opacity: 1; }
 }
 
-/* Recharts tweaks */
-.recharts-cartesian-grid line { stroke: var(--border); }
-.recharts-text { fill: var(--text-faint); font-size: 11px; }
-.recharts-curve.recharts-tooltip-cursor { stroke: var(--border-strong); }
+/*
+ * Charts, set like the charts in a printed report.
+ *
+ * Solid hairline rules rather than dashed grid lines; axis figures in the
+ * interface face with tabular digits so a column of amounts aligns; a dotted
+ * crosshair; small square legend keys. Colour comes only from the series.
+ */
+.recharts-cartesian-grid line { stroke: var(--border); stroke-dasharray: none; }
+.recharts-text { fill: var(--text-faint); font-size: 11px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+.recharts-legend-item-text { font-family: var(--font-sans); font-size: 11.5px; }
+.recharts-curve.recharts-tooltip-cursor { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 2 3; }
 .recharts-rectangle.recharts-tooltip-cursor { fill: var(--surface-hover); }
+/* The point under the cursor: ringed in the page colour so it lifts off the line. */
+.recharts-active-dot circle { stroke: var(--bg); stroke-width: 2; }
+/* Slices separated by a hairline of page, like a cut in paper. */
+.recharts-pie-sector path { stroke: var(--bg); stroke-width: 1.5; }
 .recharts-sector:focus, .recharts-layer:focus { outline: none; }

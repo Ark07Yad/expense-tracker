@@ -101,16 +101,16 @@ export default function PayoffSheet({ debt, onClose }) {
                     contentStyle={tooltipStyle}
                     formatter={(v, n) => [formatMoney(v, cur), n === 'interest' ? 'Interest' : 'Off the balance']}
                   />
-                  <Bar dataKey="principal" stackId="p" fill="var(--tone-good)" radius={[0, 0, 4, 4]} {...chartMotion(0)} />
-                  <Bar dataKey="interest" stackId="p" fill="var(--tone-bad)" radius={[4, 4, 0, 0]} {...chartMotion(1)} />
+                  <Bar dataKey="principal" stackId="p" fill="var(--tone-good)" radius={[0, 0, 1, 1]} {...chartMotion(0)} />
+                  <Bar dataKey="interest" stackId="p" fill="var(--tone-bad)" radius={[1, 1, 0, 0]} {...chartMotion(1)} />
                   <Legend
                     formatter={(n) => (
                       <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
                         {n === 'interest' ? 'Interest' : 'Off the balance'}
                       </span>
                     )}
-                    iconType="circle"
-                    iconSize={7}
+                    iconType="square"
+                    iconSize={8}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -124,8 +124,8 @@ export default function PayoffSheet({ debt, onClose }) {
                 <AreaChart data={years} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
                   <defs>
                     <linearGradient id="payoffLeft" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--tone-bad)" stopOpacity={0.16} />
-                      <stop offset="100%" stopColor="var(--tone-bad)" stopOpacity={0.02} />
+                      <stop offset="0%" stopColor="var(--tone-bad)" stopOpacity={0.09} />
+                      <stop offset="100%" stopColor="var(--tone-bad)" stopOpacity={0.09} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -136,7 +136,7 @@ export default function PayoffSheet({ debt, onClose }) {
                   />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatMoney(v, cur), 'Still owed']} />
                   <Area
-                    type="monotone" dataKey="balance" stroke="var(--tone-bad)" strokeWidth={2.2}
+                    type="monotone" dataKey="balance" stroke="var(--tone-bad)" strokeWidth={1.75}
                     fill="url(#payoffLeft)" {...chartMotion(0)}
                   />
                 </AreaChart>
