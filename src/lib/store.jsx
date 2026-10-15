@@ -18,7 +18,8 @@ export const uid = () => Math.random().toString(36).slice(2, 10);
 const initialState = {
   version: 1,
   onboarded: false,
-  theme: 'dark',
+  /** Paper is designed light-first; a saved choice is always kept. */
+  theme: 'light',
 
   profile: {
     name: '',
@@ -729,7 +730,7 @@ export function StoreProvider({ children }) {
       document.documentElement.dataset.theme = resolved;
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', resolved === 'dark' ? '#0a0a0b' : '#fafafa');
+        ?.setAttribute('content', resolved === 'dark' ? '#171614' : '#f5f2ec');
     };
     apply();
     if (state.theme !== 'system') return;

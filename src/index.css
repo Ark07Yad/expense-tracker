@@ -5,25 +5,26 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  /* One family. Headings are the same Inter, set tighter — hierarchy comes
-     from size and weight, not from a second typeface. */
-  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Paper: an editorial pairing. Geist carries the interface — labels,
+     buttons, body copy — and Instrument Serif carries what you read the page
+     for: the figures and the section headings. Two voices, each with one job. */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
 
-  /* Iris — the single accent. Money apps default to green, which then
-     collides with the one thing green should mean here: income. Keeping the
-     accent violet frees the whole semantic ramp, and because nothing else on
-     the page is saturated, a little of it goes a long way. */
-  --color-brand-50:  #f3efff;
-  --color-brand-100: #e6dcff;
-  --color-brand-200: #cfbcff;
-  --color-brand-300: #b096ff;
-  --color-brand-400: #8e6bff;
-  --color-brand-500: #7645f5;
-  --color-brand-600: #6132d6;
-  --color-brand-700: #4d26aa;
-  --color-brand-800: #3a1c81;
-  --color-brand-900: #1e0f47;
+  /* The accent is ink. On paper it is near-black, on the dark page it is
+     ivory — so the ramp points at per-theme values below rather than fixed
+     hex, and every `brand-*` utility, chart line and tint follows the theme.
+     (Green would have been the obvious accent; here it already means income.) */
+  --color-brand-50:  var(--accent-50);
+  --color-brand-100: var(--accent-100);
+  --color-brand-200: var(--accent-200);
+  --color-brand-300: var(--accent-300);
+  --color-brand-400: var(--accent-400);
+  --color-brand-500: var(--accent-500);
+  --color-brand-600: var(--accent-600);
+  --color-brand-700: var(--accent-700);
+  --color-brand-800: var(--accent-800);
+  --color-brand-900: var(--accent-900);
 
   /* The three ledger tones. These are the app's actual vocabulary — earning,
      expense, saving — so they get real names rather than being spelled out as
@@ -77,88 +78,86 @@
    Themes
    ══════════════════════════════════════════════════════════════════════════ */
 
-:root,
 :root[data-theme='dark'] {
-  /* Neutral near-black, no tint. Surfaces are solid and separated by a
-     hairline, not by blur or shadow — depth is two steps of grey and nothing
-     else. The accent is the only saturated thing on the page besides the
-     ledger's own four colours. */
-  --bg:            #0a0a0b;
-  --bg-elev:       #141416;
-  --surface:       #111113;
-  /* A surface sitting on a surface: tiles inside a card, buttons inside a tile. */
-  --surface-2:     #17171a;
-  --surface-hover: #1e1e22;
-  --border:        rgb(255 255 255 / 0.08);
-  --border-strong: rgb(255 255 255 / 0.16);
-  --text:          #f4f4f5;
-  --text-dim:      #a1a1aa;
-  /* Measured, not eyeballed: 5.6:1 on a card, 5.3:1 on a nested tile. The
-     smallest labels in the app are set in this, so it cannot be a faint grey. */
-  --text-faint:    #8b8b94;
-  /* Cards do not float. Only things that genuinely sit above the page do. */
+  /* Paper, at night: warm charcoal rather than black, ivory rather than white.
+     The warmth is the point — a cool near-black is what every other app uses. */
+  --bg:            #171614;
+  --bg-elev:       #1e1c19;
+  --surface:       #1e1c19;
+  --surface-2:     #252320;
+  --surface-hover: #2c2a26;
+  --border:        rgb(237 232 222 / 0.1);
+  --border-strong: rgb(237 232 222 / 0.2);
+  --text:          #ede8de;
+  --text-dim:      #b8b1a3;
+  --text-faint:    #9a9385;
   --shadow-card:   0 0 0 0 transparent;
-  --shadow-pop:    0 24px 64px -24px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-pop:    0 24px 64px -24px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(237 232 222 / 0.05);
 
-  /* The primary fill is ink: near-white here, near-black in light mode. */
-  --metal:      #f4f4f5;
+  --accent-50:  #2a2824; --accent-100: #34312c; --accent-200: #4a463f; --accent-300: #8d8679;
+  --accent-400: #d9d2c5; --accent-500: #ede8de; --accent-600: #f5f1e9; --accent-700: #faf7f1;
+  --accent-800: #fdfbf7; --accent-900: #ffffff;
+
+  --metal:      #ede8de;
   --metal-edge: var(--border-strong);
-  --metal-text: #0a0a0b;
-  --ring-a: #8e6bff;
-  --ring-b: #8e6bff;
-  --ring-c: #8e6bff;
+  --metal-text: #171614;
+  --ring-a: #ede8de;
+  --ring-b: #ede8de;
+  --ring-c: #ede8de;
 
-  /* Semantic accent text. Light mode needs far darker values to stay legible
-     on a pale background, so every accent colour is routed through these. */
-  --tone-earn:   #34d399;
-  --tone-spend:  #fb7185;
-  --tone-save:   #38bdf8;
-  --tone-invest: #fbbf24;
-  --tone-good:   #34d399;
-  --tone-warn:   #fbbf24;
-  --tone-bad:    #fb7185;
-  --tone-info:   #38bdf8;
-  --tone-brand:  #a99bff;
-  /* The light a card catches under the pointer. */
-  --spot: rgb(255 255 255 / 0.045);
+  --tone-earn:   #5cc28e;
+  --tone-spend:  #f08a8f;
+  --tone-save:   #7fb3e0;
+  --tone-invest: #e3b25f;
+  --tone-good:   #5cc28e;
+  --tone-warn:   #e3b25f;
+  --tone-bad:    #f08a8f;
+  --tone-info:   #7fb3e0;
+  --tone-brand:  #ede8de;
+  --spot: rgb(237 232 222 / 0.03);
 
   color-scheme: dark;
 }
 
+:root,
 :root[data-theme='light'] {
-  /* Off-white page, white cards. Same rule as dark: restraint is what lets the
-     accent read as vivid. */
-  --bg:            #fafafa;
-  --bg-elev:       #ffffff;
-  --surface:       #ffffff;
-  --surface-2:     #f6f6f7;
-  --surface-hover: #efeff1;
-  --border:        rgb(10 10 11 / 0.09);
-  --border-strong: rgb(10 10 11 / 0.18);
-  --text:          #0a0a0b;
-  --text-dim:      #52525b;
-  --text-faint:    #6b6b74;
+  /* Paper. A warm ivory page with ink on it, and figures set like a printed
+     report. Every text colour here holds 4.5:1 on every surface it sits on —
+     measured, the faintest being 4.58 on a hovered row. */
+  --bg:            #f5f2ec;
+  --bg-elev:       #fcfaf6;
+  --surface:       #fbf9f5;
+  --surface-2:     #f0ece4;
+  --surface-hover: #ebe6dc;
+  --border:        rgb(29 28 26 / 0.11);
+  --border-strong: rgb(29 28 26 / 0.22);
+  --text:          #1d1c1a;
+  --text-dim:      #57534c;
+  --text-faint:    #6b665d;
   --shadow-card:   0 0 0 0 transparent;
-  --shadow-pop:    0 24px 64px -28px rgb(10 10 11 / 0.3), 0 0 0 1px rgb(10 10 11 / 0.03);
+  --shadow-pop:    0 24px 60px -28px rgb(60 50 35 / 0.35), 0 0 0 1px rgb(29 28 26 / 0.05);
 
-  --metal:      #18181b;
+  --accent-50:  #f7f5f1; --accent-100: #ece8e0; --accent-200: #d9d3c7; --accent-300: #8a8378;
+  --accent-400: #3d3934; --accent-500: #2b2824; --accent-600: #1d1c1a; --accent-700: #151412;
+  --accent-800: #0e0d0c; --accent-900: #070706;
+
+  --metal:      #1d1c1a;
   --metal-edge: var(--border-strong);
-  --metal-text: #fafafa;
-  --ring-a: #6d4ee6;
-  --ring-b: #6d4ee6;
-  --ring-c: #6d4ee6;
+  --metal-text: #f5f2ec;
+  --ring-a: #1d1c1a;
+  --ring-b: #1d1c1a;
+  --ring-c: #1d1c1a;
 
-  --tone-earn:   #047857;
-  --tone-spend:  #be123c;
-  --tone-save:   #0369a1;
-  /* Darker than the usual amber: it has to hold 4.5:1 on a hovered row too. */
-  --tone-invest: #a3460a;
-  --tone-good:   #047857;
-  --tone-warn:   #a3460a;
-  --tone-bad:    #be123c;
-  --tone-info:   #0369a1;
-  --tone-brand:  #5b3fd6;
-  --spot: rgb(10 10 11 / 0.035);
+  --tone-earn:   #1f6b4a;
+  --tone-spend:  #b42a3c;
+  --tone-save:   #245d8f;
+  --tone-invest: #94510f;
+  --tone-good:   #1f6b4a;
+  --tone-warn:   #94510f;
+  --tone-bad:    #b42a3c;
+  --tone-info:   #245d8f;
+  --tone-brand:  #1d1c1a;
+  --spot: rgb(29 28 26 / 0.025);
 
   color-scheme: light;
 }
@@ -179,7 +178,7 @@ body {
 /* Nothing behind the page. The drifting colour wash that used to sit here was
    decoration that never stopped moving; a still, even ground is the point. */
 
-::selection { background: color-mix(in srgb, var(--tone-brand) 30%, transparent); color: var(--text); }
+::selection { background: color-mix(in srgb, var(--tone-invest) 28%, transparent); color: var(--text); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    Utilities
@@ -225,11 +224,24 @@ body {
 
 @utility metal-ring { background: var(--metal-edge); }
 
-/* Was a gradient clipped to the glyphs. Emphasis is now the accent colour. */
-@utility gradient-text { color: var(--tone-brand); }
+/* Emphasis set the way print does it: the serif, in italic. */
+@utility gradient-text { font-family: var(--font-display); font-style: italic; font-weight: 400; color: var(--text); }
 
 @utility tabular { font-variant-numeric: tabular-nums; }
-@utility display { font-family: var(--font-display); letter-spacing: -0.028em; font-feature-settings: 'tnum', 'cv02', 'cv03', 'cv04', 'ss01'; }
+/*
+ * Figures and headings, in the serif.
+ *
+ * Instrument Serif has one weight. Plenty of call sites ask for `font-semibold`
+ * on a figure, and a browser will happily fake a bold by smearing the outline —
+ * `font-synthesis: none` refuses, so the serif is always drawn as designed.
+ * Lining figures so a column of amounts sits on one baseline.
+ */
+@utility display {
+  font-family: var(--font-display);
+  font-synthesis: none;
+  letter-spacing: -0.005em;
+  font-variant-numeric: lining-nums;
+}
 
 /* A slow specular sweep for the hero card. Decorative only — it sits behind
    `pointer-events: none` and disappears under reduced motion. */
@@ -328,6 +340,43 @@ body {
   --motion-base: 220ms;
   --motion-slide: 340ms;
 }
+
+/*
+ * The serif is for reading at a glance, not for small print.
+ *
+ * Instrument Serif is a display face — drawn for headline sizes — and below
+ * about 18px its hairlines thin out and the figures crowd. Anything asked to
+ * be `display` at a small size is set in the interface face instead, with
+ * tabular figures so small amounts still line up. Listed by size rather than
+ * by component, so a new call site cannot forget the rule.
+ */
+.display:is(.text-\[14px\], .text-\[15px\], .text-\[16px\], .text-\[17px\], .text-xs, .text-sm, .text-base) {
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * A card is a section of the page, not a box on it.
+ *
+ * Paper rules its sections off with a hairline across the top and lets the
+ * page show through — no fill, no side edges, no corners — the way a printed
+ * report does. Content sits flush with the rule. Anything a section *contains*
+ * that is a surface (a tile, a row, a field) is raised paper again.
+ *
+ * Unlayered on purpose: it has to beat the `surface` utility the card also
+ * carries, and that class stays because tests and layout code find cards by it.
+ */
+.card.surface {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border-strong);
+  border-radius: 0;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+.card.surface > * { --surface-next: var(--surface); }
 
 /*
  * Skip to content.

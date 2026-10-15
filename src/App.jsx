@@ -287,7 +287,7 @@ export default function App() {
             <span className="size-9 rounded-xl grid place-items-center metal">
               <Icon name="chart" className="size-[18px]" />
             </span>
-            <span className="text-[15px] font-semibold tracking-tight display">CoinTrack</span>
+            <span className="text-[22px] leading-none display">CoinTrack</span>
           </button>
 
           <button
@@ -354,7 +354,7 @@ export default function App() {
               <span className="size-9 rounded-xl grid place-items-center metal">
                 <Icon name="chart" className="size-[18px]" />
               </span>
-              <span className="text-[15px] font-semibold tracking-tight display">CoinTrack</span>
+              <span className="text-[22px] leading-none display">CoinTrack</span>
             </div>
             <div className="flex items-center gap-1">
               <IconButton name="search" label="Search and jump" className="size-11" onClick={openPalette} />

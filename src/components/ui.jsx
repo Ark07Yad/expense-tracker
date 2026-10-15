@@ -121,7 +121,7 @@ export const mix = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transpa
 // eslint-disable-next-line no-unused-vars
 export function Card({ className = '', children, glow = false, sheen = false, ...rest }) {
   return (
-    <div data-spot="" className={`surface rounded-3xl relative overflow-hidden ${className}`} {...rest}>
+    <div data-spot="" className={`card surface rounded-3xl relative overflow-hidden ${className}`} {...rest}>
       {children}
     </div>
   );
@@ -139,14 +139,13 @@ export function SectionTitle({ icon, children, action, sub }) {
      */
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-3 mb-3">
       <div className="min-w-0">
-        {/* Sentence case at a readable size. The small tracked capitals are
-            kept for labels on figures, where they are a caption; as a section
-            heading they made every section whisper at the same volume. */}
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em]">
-          {icon && <Icon name={icon} className="size-4 text-faint" />}
+        {/* A section heading is set in the serif, like a headline in print.
+            The icon stays as a small marker; the words do the work. */}
+        <h2 className="display flex items-center gap-2.5 text-[23px] leading-tight">
+          {icon && <Icon name={icon} className="size-4 text-faint shrink-0" />}
           {children}
         </h2>
-        {sub && <p className="text-[12.5px] text-faint mt-0.5">{sub}</p>}
+        {sub && <p className="text-[12.5px] text-faint mt-1">{sub}</p>}
       </div>
       {action && <div className="shrink-0 -mx-1 px-1 overflow-x-auto sm:overflow-visible">{action}</div>}
     </div>
@@ -519,8 +518,8 @@ export function Stat({ label, value, icon, tone = 'default', sub, delta, invertD
   return (
     <Tag
       onClick={onClick}
-      className={`surface rounded-2xl p-3.5 text-left w-full ${
-        onClick ? 'transition-all hover:[background:var(--surface-hover)] active:scale-[0.98]' : ''
+      className={`border-l border-hair pl-4 pr-2 py-1.5 text-left w-full ${
+        onClick ? 'rounded-r-xl transition-colors hover:[background:var(--surface-hover)]' : ''
       }`}
     >
       <div className="flex items-start gap-1.5 text-[11px] uppercase tracking-wider text-faint mb-1.5">
@@ -530,7 +529,7 @@ export function Stat({ label, value, icon, tone = 'default', sub, delta, invertD
             "Set as…" — hiding the only thing that says what the number is. */}
         <span className="leading-tight">{label}</span>
       </div>
-      <div className={`text-[21px] font-semibold display leading-none ${TONE_TEXT[tone]}`}>{value}</div>
+      <div className={`text-[28px] display leading-none ${TONE_TEXT[tone]}`}>{value}</div>
       <div className="flex items-center gap-2 mt-1.5 min-h-[16px]">
         {delta && <Delta change={delta} invert={invertDelta} />}
         {sub && <span className="text-[11px] text-faint truncate">{sub}</span>}
