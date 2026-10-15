@@ -769,7 +769,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/60 animate-[pop_0.2s_ease-out]"
+        className="absolute inset-0 bg-[rgb(29_28_26/0.5)] animate-[pop_0.2s_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -798,7 +798,9 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, size =
           style={{ position: 'fixed', opacity: 0, pointerEvents: 'none' }}
         />
 
-        <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4 border-b border-hair shrink-0">
+        {/* A grab handle on the phone, where this rises from the bottom edge. */}
+        <div aria-hidden="true" className="sm:hidden mx-auto mt-2 h-1 w-9 rounded-full shrink-0" style={{ background: 'var(--border-strong)' }} />
+        <div className="flex items-start justify-between gap-4 px-5 pt-3 sm:pt-5 pb-4 border-b border-hair shrink-0">
           <div className="min-w-0">
             <h3 id={titleId} className="text-lg font-semibold truncate">{title}</h3>
             {subtitle && <p className="text-[12.5px] text-dim mt-0.5">{subtitle}</p>}

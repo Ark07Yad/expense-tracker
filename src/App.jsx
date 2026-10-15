@@ -46,6 +46,17 @@ const MOD =
     ? '⌘'
     : 'Ctrl ';
 
+/**
+ * The phone's "you are here" mark: a short ink rule sitting on the bar's top
+ * hairline, centred over the current item — the way a printed tab is marked —
+ * rather than a pill behind it.
+ */
+const railStyle = (box) => ({
+  width: 18,
+  height: 2,
+  transform: `translate3d(${box.x + box.w / 2 - 9}px, -1px, 0)`,
+});
+
 const thumbStyle = (box) => ({
   width: box.w,
   height: box.h,
@@ -347,7 +358,15 @@ export default function App() {
         </aside>
 
         {/* ── Main ── */}
-        <main id="main" tabIndex={-1} className="flex-1 min-w-0 py-5 sm:py-6 pb-28 lg:pb-8 outline-none">
+        {/* Top: clear of a notch when installed. Bottom: clear of the tab bar and
+            the + button above it, so the last thing on a screen can always be
+            scrolled into view rather than sitting underneath them. */}
+        <main
+          id="main"
+          tabIndex={-1}
+          className="flex-1 min-w-0 py-5 pt-[max(1.25rem,env(safe-area-inset-top))] sm:py-6
+                     pb-[calc(9rem+env(safe-area-inset-bottom))] lg:pb-8 outline-none"
+        >
           {/* Mobile header */}
           <header className="lg:hidden flex items-center justify-between mb-5">
             <div className="flex items-center gap-2.5">
@@ -381,24 +400,23 @@ export default function App() {
       <button
         onClick={() => setComposerOpen(true)}
         aria-label="New entry"
-        className="lg:hidden fixed right-4 bottom-24 z-40 size-14 rounded-2xl metal grid place-items-center
-                   transition-all active:scale-90"
+        className="lg:hidden fixed right-4 z-40 size-[52px] rounded-full metal grid place-items-center
+                   transition-transform active:scale-90"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)', boxShadow: 'var(--shadow-pop)' }}
       >
-        <Icon name="plus" className="size-6" />
+        <Icon name="plus" className="size-[22px]" />
       </button>
 
       {/* ── Bottom nav (mobile) ── */}
+      {/* Flush with the bottom edge and ruled off with a hairline, on the page
+          colour — the foot of the page rather than a panel floating over it. */}
       <nav
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pt-2"
-        style={{ background: 'linear-gradient(to top, var(--bg) 62%, transparent)' }}
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-hair"
+        style={{ background: 'var(--bg)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div
-          ref={bottomNav.ref}
-          className="surface relative rounded-3xl flex justify-around p-1.5"
-          style={{ background: 'var(--bg-elev)' }}
-        >
+        <div ref={bottomNav.ref} className="relative flex justify-around px-1">
           {bottomNav.box && (
-            <span aria-hidden="true" className="thumb rounded-2xl [background:var(--surface-hover)]" style={thumbStyle(bottomNav.box)} />
+            <span aria-hidden="true" className="thumb rounded-full [background:var(--text)]" style={railStyle(bottomNav.box)} />
           )}
           {NAV.map((item) => (
             <button
@@ -406,11 +424,11 @@ export default function App() {
               onClick={() => navigate(item.id)}
               aria-current={tab === item.id ? 'page' : undefined}
               data-active={tab === item.id}
-              className={`relative z-[1] flex flex-col items-center gap-1 px-2 py-2 rounded-2xl transition-all active:scale-90
+              className={`relative z-[1] flex flex-col items-center gap-1 min-w-14 px-2 pt-2.5 pb-2 transition-opacity active:opacity-60
                 ${tab === item.id ? 'text-[color:var(--text)]' : 'text-faint'}`}
             >
               <Icon name={item.icon} className="size-[19px]" />
-              <span className="text-[9.5px] font-medium">{item.label}</span>
+              <span className="text-[10px] font-medium">{item.label}</span>
             </button>
           ))}
           <button
@@ -418,14 +436,14 @@ export default function App() {
             aria-haspopup="dialog"
             aria-expanded={moreOpen}
             data-active={inExtra}
-            className={`relative z-[1] flex flex-col items-center gap-1 px-2 py-2 rounded-2xl transition-all active:scale-90
+            className={`relative z-[1] flex flex-col items-center gap-1 min-w-14 px-2 pt-2.5 pb-2 transition-opacity active:opacity-60
               ${inExtra ? 'text-[color:var(--text)]' : 'text-faint'}`}
           >
             <span className="relative grid place-items-center size-[19px]">
               <Icon name="menu" className="size-[19px]" />
               {inExtra && <span className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-brand-400" />}
             </span>
-            <span className="text-[9.5px] font-medium">More</span>
+            <span className="text-[10px] font-medium">More</span>
           </button>
         </div>
       </nav>

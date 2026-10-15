@@ -140,7 +140,7 @@ export default function CommandPalette({ onClose, commands, findEntries, returnF
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[10vh] sm:pt-[14vh]">
       <div
-        className="absolute inset-0 bg-black/60 animate-[pop_0.18s_ease-out]"
+        className="absolute inset-0 bg-[rgb(29_28_26/0.5)] animate-[pop_0.18s_ease-out]"
         onClick={onClose}
         aria-hidden="true"
       />
