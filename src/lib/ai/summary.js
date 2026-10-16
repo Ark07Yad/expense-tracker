@@ -293,7 +293,7 @@ export function buildAdviceSummary(state, answers = defaultAnswers(), topic = 'i
   }
 
   summary.keptByMonth = months
-    .toReversed()
+    .map((_, i) => months[months.length - 1 - i])
     .map((m) => ({
       month: m.key,
       income: round(m.f.totals.earning),

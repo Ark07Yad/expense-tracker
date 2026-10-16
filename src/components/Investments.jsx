@@ -142,7 +142,7 @@ export default function Investments({ toast, onNavigate }) {
               />
             </div>
 
-            <div className="h-56 mt-5 -ml-2">
+            <div className="h-56 mt-5">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={inv.series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <defs>

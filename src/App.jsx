@@ -262,14 +262,16 @@ export default function App() {
     (query) =>
       state.entries
         .filter((e) =>
-          `${e.title} ${e.note || ''} ${categoryById(e.category)?.label || ''}`.toLowerCase().includes(query)
+          // An entry from an old backup can lack a title; it must not be
+          // indexed as the word "undefined".
+          `${e.title || ''} ${e.note || ''} ${categoryById(e.category)?.label || ''}`.toLowerCase().includes(query)
         )
-        .toSorted((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
         .slice(0, 6)
         .map((e) => ({
           id: `entry-${e.id}`,
           group: 'Entries',
-          label: e.title,
+          label: e.title || categoryById(e.category)?.label || 'Untitled',
           icon: categoryById(e.category)?.icon || 'ledger',
           hint: `${shortDate(e.date)} · ${formatMoney(e.amount, state.profile.currency)}`,
           run: () => {

@@ -205,7 +205,7 @@ export default function Analytics({ onNavigate }) {
               {p.label} view
             </SectionTitle>
 
-            <div className="h-72 -ml-2">
+            <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 {view === 'flow' ? (
                   <ComposedChart data={f.series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} stackOffset="sign">

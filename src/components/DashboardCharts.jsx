@@ -18,9 +18,12 @@ import { tooltipStyle } from './ui';
 /** Daily spend for the last 30 days, with a seven-day mean through it. */
 export function SpendTrend({ data, cur }) {
   return (
-    <div className="h-52 -ml-2">
+    <div className="h-52">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
+        {/* Right margin wide enough for half a date label: the last tick is
+            today's, centred on the final point, and sections have no side
+            padding to absorb the overhang — it was being clipped. */}
+        <AreaChart data={data} margin={{ top: 6, right: 20, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="dashSpend" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--color-brand-400)" stopOpacity={0.09} />
@@ -88,7 +91,7 @@ export function CategoryDonut({ data, cur }) {
 /** Net worth against contributions — the gap between them is the return. */
 export function NetWorthSpark({ data, cur }) {
   return (
-    <div className="h-24 mt-3 -mx-1">
+    <div className="h-24 mt-3">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
           {/* A zero-based axis flattens a net-worth line into a solid block —
