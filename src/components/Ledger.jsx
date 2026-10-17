@@ -8,7 +8,7 @@
  * I spend today" and a single list serves neither well.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { animateOut, stagger, useFlipList } from '../lib/motion';
 import { KINDS, categoriesFor, categoryById, kindById, prefixFor } from '../lib/data';
@@ -107,10 +107,11 @@ export default function Ledger({ date, setDate, toast }) {
   const filterTotals = totalsOf(filtered);
   const catOptions = kindFilter === 'all' ? Object.values(categoriesFor('expense')) : categoriesFor(kindFilter);
 
-  const openEdit = (entry) => {
+  // Stable, so the memoised rows below are not all re-rendered by every page.
+  const openEdit = useCallback((entry) => {
     setEditing(entry);
     setComposerOpen(true);
-  };
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -309,6 +310,10 @@ export default function Ledger({ date, setDate, toast }) {
         ) : (
           <div className="space-y-4">
             {grouped.map((g) => (
+              /* Not content-visibility:auto, though it measured faster at
+                 thousands of rows: a skipped day never starts its rows' rise
+                 animation, so they sat at opacity 0 and faded in as you
+                 scrolled. Memoised rows are fast enough on their own. */
               <div key={g.date}>
                 {/* The jump-to-day control lives on the date header, not on
                     every row — repeating it under each amount put a link on
@@ -389,7 +394,15 @@ function EntryList({ entries, onEdit, dispatch, toast, onView }) {
   );
 }
 
-function EntryRow({ entry, index, onEdit, dispatch, toast, onView }) {
+/*
+ * Memoised: "Show 50 more" re-renders the archive, and without this every row
+ * already on screen rendered again with it — measured at 13,600 entries, the
+ * fortieth page took 100ms on a laptop and ~390ms at 4x CPU throttling, growing
+ * with each page. Now only the new rows render. Every prop is stable: the entry
+ * object is unchanged unless edited, and the callbacks are state setters,
+ * reducer dispatch or useCallback.
+ */
+const EntryRow = memo(function EntryRow({ entry, index, onEdit, dispatch, toast, onView }) {
   const node = useRef(null);
   const [armed, setArmed] = useState(false);
   const cat = categoryById(entry.category);
@@ -462,7 +475,7 @@ function EntryRow({ entry, index, onEdit, dispatch, toast, onView }) {
       </div>
     </div>
   );
-}
+});
 
 /* ───────────────────────────── Attachment viewer ─────────────────────────── */
 
@@ -522,8 +535,8 @@ function AttachmentViewer({ entry, onClose }) {
                 <div className="h-40 animate-pulse" style={{ background: 'var(--border)' }} />
               ) : url === null ? (
                 <p className="text-[12.5px] text-dim p-4 leading-relaxed">
-                  This file is not on this device. Attachments are stored locally and are not
-                  included in a JSON backup, so they do not travel with a restore.
+                  This file is not on this device. It was probably restored from a .json backup, which
+                  holds the ledger only — restore the .zip backup to bring receipts back.
                 </p>
               ) : a.type === 'application/pdf' ? (
                 <object data={url} type="application/pdf" className="w-full h-[60vh]" aria-label={a.name}>

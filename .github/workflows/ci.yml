@@ -86,3 +86,47 @@ jobs:
             test-results
             playwright-report
           retention-days: 7
+
+  visual:
+    name: Visual (chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: check
+    # The official image, so fonts and anti-aliasing are identical to the run
+    # that rendered the baselines. Its tag must match @playwright/test exactly;
+    # the first step checks that rather than letting a mismatch show up as a
+    # wall of one-pixel diffs.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+    env:
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Image matches the installed Playwright
+        run: |
+          installed="$(npx playwright --version | awk '{print $2}')"
+          test "$installed" = "1.62.1" || { echo "::error::Playwright is $installed but the image is v1.62.1 — update the image tag here and in visual-baselines.yml, then re-render the baselines."; exit 1; }
+
+      - name: Compare screenshots
+        run: |
+          if ! ls e2e/visual.spec.js-snapshots/*-linux.png >/dev/null 2>&1; then
+            echo "::notice::No visual baselines yet — run the 'Update visual baselines' workflow and commit its images."
+            exit 0
+          fi
+          npx playwright test --project=visual
+
+      - name: Upload diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: test-results
+          retention-days: 7

@@ -18,6 +18,74 @@ const loadedFonts = (page) =>
     return [...new Set([...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/["']/g, '')))];
   });
 
+/**
+ * Whether this browser build can store and read back binary data in IndexedDB.
+ *
+ * A platform capability, so it is probed rather than assumed from the browser
+ * name: Playwright's Linux WebKit build cannot; Safari proper and the macOS
+ * build can. Receipt assertions skip on a build that cannot.
+ */
+const canRoundTripBinary = (page) =>
+  page.evaluate(async () => {
+    try {
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('probe-binary', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('x');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      const written = await new Promise((res) => {
+        const tx = db.transaction('x', 'readwrite');
+        tx.objectStore('x').put(new Uint8Array([1, 2, 3]).buffer, 'k');
+        tx.oncomplete = () => res(true);
+        tx.onerror = () => res(false);
+        tx.onabort = () => res(false);
+      });
+      const read = written
+        ? await new Promise((res) => {
+            const tx = db.transaction('x', 'readonly');
+            const rq = tx.objectStore('x').get('k');
+            rq.onsuccess = () => res(rq.result?.byteLength ?? 0);
+            rq.onerror = () => res(0);
+          })
+        : 0;
+      db.close();
+      indexedDB.deleteDatabase('probe-binary');
+      return read === 3;
+    } catch {
+      return false;
+    }
+  });
+
+/**
+ * What the receipt viewer is showing, as one word.
+ *
+ * The viewer has three states — loading, "not on this device", and the image —
+ * and a failure that only says "no img element" cannot tell them apart.
+ */
+const viewerState = (page) =>
+  page.getByRole('dialog').evaluate((dialog) => {
+    const img = dialog.querySelector('img');
+    if (img) return img.naturalWidth > 0 ? 'image' : 'broken-image';
+    if (dialog.querySelector('object')) return 'pdf';
+    if (dialog.textContent.includes('not on this device')) return 'missing';
+    if (dialog.querySelector('.animate-pulse')) return 'loading';
+    return `unknown: ${dialog.textContent.slice(0, 200)}`;
+  });
+
+/** A tiny real PNG, written where a file input can pick it up. */
+async function receiptFixture(testInfo) {
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  await mkdir(testInfo.outputDir, { recursive: true });
+  const file = join(testInfo.outputDir, 'receipt.png');
+  await writeFile(file, Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII=',
+    'base64'
+  ));
+  return file;
+}
+
 test.describe('offline', () => {
   test('registers a service worker and takes control of the page', async ({ page }) => {
     await startWithSampleData(page);
@@ -151,6 +219,93 @@ test.describe('backup', () => {
     await go(page, 'Ledger');
     await expect(page.getByText('Before the backup').first()).toBeVisible();
   });
+
+  test('carries receipts in a zip, and they open again after an erase', async ({ page }, testInfo) => {
+    const file = await receiptFixture(testInfo);
+    await startEmpty(page);
+    test.skip(!(await canRoundTripBinary(page)), 'this build cannot round-trip binary data through IndexedDB');
+
+    await page.locator('aside').getByRole('button', { name: 'New entry' }).click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByPlaceholder('0').first().fill('780');
+    await sheet.getByLabel('Title').fill('Lunch with receipt');
+    await sheet.locator('input[type=file]').setInputFiles(file);
+    await expect(sheet.getByText('receipt.png')).toBeVisible();
+    await sheet.getByRole('button', { name: /^Log / }).click();
+    await settledState(page, 1);
+
+    await go(page, 'Settings');
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: /Export backup/ }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^cointrack-\d{4}-\d{2}-\d{2}\.zip$/);
+    await expect(page.getByText('Backup downloaded with 1 receipt')).toBeVisible();
+    const path = await download.path();
+
+    // A real zip someone can open without the app: the JSON and the image.
+    const { unzipSync } = await import('fflate');
+    const zip = unzipSync(new Uint8Array(await (await import('node:fs/promises')).readFile(path)));
+    const names = Object.keys(zip);
+    expect(names).toContain('cointrack.json');
+    expect(names.filter((n) => /^receipts\/att_\w+\.png$/.test(n))).toHaveLength(1);
+
+    await page.getByRole('button', { name: /Erase everything/ }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Erase everything' }).click();
+    await dialog.getByRole('button', { name: /Yes, erase it/ }).click();
+    await expect(page.getByRole('heading', { name: /set up your ledger/ })).toBeVisible();
+
+    await page.getByRole('button', { name: /^Continue/ }).click();
+    await page.getByRole('button', { name: /Skip —/ }).click();
+    await go(page, 'Settings');
+    await page.getByRole('button', { name: /Restore from file/ }).click();
+    await page.locator('input[type=file]').setInputFiles(path);
+    await expect(page.getByText('Restored 1 entries and 1 receipt')).toBeVisible();
+
+    // The receipt is back on this device, not just its name.
+    await go(page, 'Ledger');
+    await expect(page.getByText('Lunch with receipt').first()).toBeVisible();
+    await page.getByRole('button', { name: /View 1 attached file/ }).first().click();
+    await expect.poll(() => viewerState(page), { timeout: 12_000 }).toBe('image');
+  });
+});
+
+test.describe('a ledger bigger than localStorage', () => {
+  test('keeps everything in IndexedDB, and never starts from a stale copy', async ({ page }) => {
+    // Fill localStorage almost to the browser's quota, so the app's mirror of
+    // the ledger cannot fit — what a ledger of ~15,000 entries does in Safari.
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('filled')) return;
+      sessionStorage.setItem('filled', '1');
+      const chunk = 'x'.repeat(256 * 1024);
+      try {
+        for (let i = 0; i < 200; i++) localStorage.setItem(`junk${i}`, chunk);
+      } catch { /* full */ }
+      // Then leave a little room — enough for the marker, not for the ledger:
+      // free one chunk, top up in 4KB pieces until full, free two pieces.
+      localStorage.removeItem('junk0');
+      let n = 0;
+      try {
+        for (; n < 200; n++) localStorage.setItem(`fill${n}`, 'x'.repeat(4096));
+      } catch { /* full */ }
+      localStorage.removeItem(`fill${n - 1}`);
+      localStorage.removeItem(`fill${n - 2}`);
+    });
+
+    await startWithSampleData(page);
+    await logEntry(page, { amount: 6543, title: 'Logged past the quota' });
+    await page.waitForTimeout(800); // past the save debounce
+
+    const mirror = await page.evaluate(() => JSON.parse(localStorage.getItem('cointrack.v1')));
+    expect(mirror?.entries, 'the mirror still holds a stale ledger').toBeUndefined();
+    expect(mirror?.mirror).toBe('too-large');
+
+    // A reload starts from IndexedDB, with the entry made after the quota ran out.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: /Good |Still up/ })).toBeVisible();
+    await go(page, 'Ledger');
+    await expect(page.getByText('Logged past the quota').first()).toBeVisible();
+  });
 });
 
 test.describe('CSV import', () => {
@@ -198,17 +353,7 @@ test.describe('CSV import', () => {
 
 test.describe('receipts', () => {
   test('attaches a file, shows it, and reclaims it when the entry goes', async ({ page }, testInfo) => {
-    const { mkdir, writeFile } = await import('node:fs/promises');
-    const { join } = await import('node:path');
-    await mkdir(testInfo.outputDir, { recursive: true });
-
-    // A tiny real PNG.
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII=',
-      'base64'
-    );
-    const file = join(testInfo.outputDir, 'receipt.png');
-    await writeFile(file, png);
+    const file = await receiptFixture(testInfo);
 
     await startEmpty(page);
     await page.locator('aside').getByRole('button', { name: 'New entry' }).click();
@@ -239,36 +384,7 @@ test.describe('receipts', () => {
      * starts running again by itself if that changes, and never silently passes
      * on a platform where the feature is broken for real.
      */
-    const canRoundTrip = await page.evaluate(async () => {
-      try {
-        const db = await new Promise((res, rej) => {
-          const r = indexedDB.open('probe-binary', 1);
-          r.onupgradeneeded = () => r.result.createObjectStore('x');
-          r.onsuccess = () => res(r.result);
-          r.onerror = () => rej(r.error);
-        });
-        const written = await new Promise((res) => {
-          const tx = db.transaction('x', 'readwrite');
-          tx.objectStore('x').put(new Uint8Array([1, 2, 3]).buffer, 'k');
-          tx.oncomplete = () => res(true);
-          tx.onerror = () => res(false);
-          tx.onabort = () => res(false);
-        });
-        const read = written
-          ? await new Promise((res) => {
-              const tx = db.transaction('x', 'readonly');
-              const rq = tx.objectStore('x').get('k');
-              rq.onsuccess = () => res(rq.result?.byteLength ?? 0);
-              rq.onerror = () => res(0);
-            })
-          : 0;
-        db.close();
-        indexedDB.deleteDatabase('probe-binary');
-        return read === 3;
-      } catch {
-        return false;
-      }
-    });
+    const canRoundTrip = await canRoundTripBinary(page);
     test.skip(!canRoundTrip, 'this build cannot round-trip binary data through IndexedDB');
 
     /*
@@ -280,17 +396,7 @@ test.describe('receipts', () => {
      * says which branch rendered, which is the difference between a diagnosis
      * and another run.
      */
-    const viewerState = () =>
-      page.getByRole('dialog').evaluate((dialog) => {
-        const img = dialog.querySelector('img');
-        if (img) return img.naturalWidth > 0 ? 'image' : 'broken-image';
-        if (dialog.querySelector('object')) return 'pdf';
-        if (dialog.textContent.includes('not on this device')) return 'missing';
-        if (dialog.querySelector('.animate-pulse')) return 'loading';
-        return `unknown: ${dialog.textContent.slice(0, 200)}`;
-      });
-
-    await expect.poll(viewerState, { timeout: 12_000 }).toBe('image');
+    await expect.poll(() => viewerState(page), { timeout: 12_000 }).toBe('image');
   });
 });
 

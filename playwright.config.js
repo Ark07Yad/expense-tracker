@@ -24,7 +24,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'line' : [['list']],
   timeout: 30_000,
-  expect: { timeout: 7_000 },
+  expect: {
+    timeout: 7_000,
+    // Same machine image every run, so allow almost nothing: 0.1% of pixels.
+    toHaveScreenshot: { maxDiffPixelRatio: 0.001, animations: 'disabled', caret: 'hide' },
+  },
 
   use: {
     baseURL: 'http://localhost:4181',
@@ -41,9 +45,16 @@ export default defineConfig({
    * invisible in the others.
    */
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'chromium', testIgnore: /visual\.spec/, use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', testIgnore: /visual\.spec/, use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', testIgnore: /visual\.spec/, use: { ...devices['Desktop Safari'] } },
+    /*
+     * Screenshot comparisons, in one engine only: they catch layout and theme
+     * breakage, which the three projects above already test for behaviour.
+     * Baselines are Linux renders from the Playwright Docker image (see the
+     * Visual job in ci.yml), so the spec skips on any other OS.
+     */
+    { name: 'visual', testMatch: /visual\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
   ],
 
   webServer: {

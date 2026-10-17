@@ -1,0 +1,38 @@
+name: Update visual baselines
+
+# Run by hand after an intended visual change. Renders every screenshot in the
+# same image the Visual CI job compares in, checks the renders are stable by
+# taking them twice more, and uploads them. Download the artifact, put the
+# images in e2e/visual.spec.js-snapshots/, look at them, and commit.
+on:
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+    env:
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Render baselines
+        run: npx playwright test --project=visual --update-snapshots
+
+      - name: Check they are stable
+        run: npx playwright test --project=visual --repeat-each=2
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: e2e/visual.spec.js-snapshots
+          retention-days: 7

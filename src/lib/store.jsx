@@ -7,7 +7,7 @@
  * and asks the browser not to evict either.
  */
 
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { categoriesFor } from './data';
 import { monthKey, todayKey } from './calc';
 import * as persist from './persist';
@@ -597,11 +597,24 @@ export function StoreProvider({ children }) {
   const booted = useRef(new WeakSet());
   const heldAt = useRef(0);
 
-  const [state, dispatch] = useReducer(reducer, undefined, () => {
+  /*
+   * A marker instead of a mirror means the ledger outgrew localStorage and the
+   * only current copy is in IndexedDB. Nothing renders until it has been read:
+   * a blank moment is better than showing an empty ledger someone could start
+   * typing into (see persist.isMirrorMarker).
+   */
+  const [boot] = useState(() => {
     const raw = persist.loadSync();
-    const initial = hydrate(raw);
+    return { raw, marker: persist.isMirrorMarker(raw) };
+  });
+  // Whether the authoritative read (`persist.load`) has answered yet.
+  const [loaded, setLoaded] = useState(false);
+
+  const [state, dispatch] = useReducer(reducer, undefined, () => {
+    const initial = hydrate(boot.marker ? { theme: boot.raw.theme } : boot.raw);
     booted.current.add(initial);
-    heldAt.current = raw?.savedAt || 0;
+    // Zero for a marker, so whatever IndexedDB holds is adopted.
+    heldAt.current = boot.marker ? 0 : boot.raw?.savedAt || 0;
     return initial;
   });
 
@@ -642,7 +655,9 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     persist.load().then((stored) => {
-      if (!cancelled) adoptIfNewer(stored);
+      if (cancelled) return;
+      adoptIfNewer(stored);
+      setLoaded(true);
     });
     return () => {
       cancelled = true;
@@ -711,10 +726,15 @@ export function StoreProvider({ children }) {
    * afterwards is safe, because a blob nothing references is unreachable
    * either way, and idempotent if it fails.
    */
+  //
+  // Only once the authoritative read has answered: until then the entries in
+  // memory may be the mirror's, or none at all, and every receipt would look
+  // like an orphan.
   useEffect(() => {
+    if (!loaded) return;
     const id = setTimeout(() => persist.pruneFiles(referencedIds(state.entries)), 4000);
     return () => clearTimeout(id);
-  }, [state.entries]);
+  }, [state.entries, loaded]);
 
   // Ask the browser to stop evicting this origin once the user has real data in
   // it. Asking on first paint is both premature and more likely to be refused.
@@ -739,7 +759,7 @@ export function StoreProvider({ children }) {
   }, [state.theme]);
 
   const value = useMemo(() => ({ state, dispatch }), [state]);
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+  return <StoreContext.Provider value={value}>{boot.marker && !loaded ? null : children}</StoreContext.Provider>;
 }
 
 export function useStore() {

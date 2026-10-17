@@ -12,6 +12,7 @@ import { CURRENCIES, categoriesFor } from '../lib/data';
 import { buildDemo } from '../lib/demo';
 import { formatMoney, formatPercent, todayKey } from '../lib/calc';
 import { formatBytes } from '../lib/attachments';
+import { buildBackup, readBackup } from '../lib/backup';
 import * as persist from '../lib/persist';
 import ImportSheet from './ImportSheet';
 import SectionTips from './SectionTips';
@@ -35,7 +36,7 @@ export default function Settings({ toast, onNavigate }) {
   useEffect(() => {
     persist.storageStatus().then(setStorage);
     persist.fileUsage().then(setFiles);
-  }, [state.entries.length]);
+  }, [state.entries]);
 
   const budgets = state.profile.budgets;
   const budgetTotal = useMemo(
@@ -70,14 +71,21 @@ export default function Settings({ toast, onNavigate }) {
    * it immediately races the browser's own read of the blob; Chrome usually
    * wins that race, others do not, and losing it produces an empty or failed
    * download.
+   *
+   * With receipts it is a zip of the JSON and the files (see lib/backup.js).
    */
-  const exportData = () => {
-    const payload = { app: 'cointrack', version: state.version, exportedAt: new Date().toISOString(), state };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+  const exportData = async () => {
+    let backup;
+    try {
+      backup = await buildBackup(state, { getFile: persist.getFile, date: todayKey() });
+    } catch {
+      toast?.('Could not build the backup');
+      return;
+    }
+    const url = URL.createObjectURL(backup.blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cointrack-${todayKey()}.json`;
+    a.download = backup.filename;
     a.style.display = 'none';
     document.body.append(a);
     a.click();
@@ -85,26 +93,47 @@ export default function Settings({ toast, onNavigate }) {
       a.remove();
       URL.revokeObjectURL(url);
     }, 5000);
-    toast?.('Backup downloaded');
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    toast?.(
+      backup.receipts
+        ? `Backup downloaded with ${plural(backup.receipts, 'receipt')}`
+        : backup.missing
+          ? `Backup downloaded — ${plural(backup.missing, 'receipt')} not on this device`
+          : 'Backup downloaded'
+    );
   };
 
-  const importData = (event) => {
+  /*
+   * Receipts are written before the ledger is replaced. The other order would
+   * briefly have entries pointing at files that are not there yet, and a prune
+   * landing in that gap could not tell them from orphans.
+   */
+  const importData = async (event) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result));
-        const next = parsed.state || parsed;
-        if (!next || !Array.isArray(next.entries)) throw new Error('not a CoinTrack backup');
-        dispatch({ type: 'replace', state: { ...next, onboarded: true } });
-        toast?.(`Restored ${next.entries.length} entries`);
-      } catch {
-        toast?.('That file is not a CoinTrack backup');
-      }
-    };
-    reader.readAsText(file);
     event.target.value = '';
+    if (!file) return;
+    let backup;
+    try {
+      backup = await readBackup(file);
+    } catch {
+      toast?.('That file is not a CoinTrack backup');
+      return;
+    }
+    let saved = 0;
+    for (const [id, blob] of backup.files) {
+      try {
+        await persist.putFile(id, blob);
+        saved++;
+      } catch {
+        // Out of space: the ledger still matters more than the images.
+      }
+    }
+    dispatch({ type: 'replace', state: { ...backup.state, onboarded: true } });
+    const lost = backup.files.size - saved;
+    toast?.(
+      `Restored ${backup.state.entries.length} entries${saved ? ` and ${saved} receipt${saved === 1 ? '' : 's'}` : ''}` +
+        (lost ? ` — ${lost} could not be saved` : '')
+    );
   };
 
   const loadDemo = () => {
@@ -353,7 +382,7 @@ export default function Settings({ toast, onNavigate }) {
             <Icon name="upload" className="size-3.5" />
             Restore from file
           </Button>
-          <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={importData} />
+          <input ref={fileRef} type="file" accept="application/json,.json,application/zip,.zip" className="hidden" onChange={importData} />
           <Button variant="ghost" size="sm" onClick={() => setCsvOpen(true)}>
             <Icon name="ledger" className="size-3.5" />
             Import CSV
@@ -370,9 +399,8 @@ export default function Settings({ toast, onNavigate }) {
 
         <p className="text-[11.5px] text-faint mt-3 leading-relaxed">
           Loading sample data replaces every entry and holding you currently have. Export first if you want to
-          keep them. A backup carries your entries, holdings, schedules and goals — but not attached receipts,
-          which stay on this device only: putting image bytes into the JSON would multiply its size for files
-          you already have the originals of.
+          keep them. A backup carries everything, attached receipts included: it downloads as a .zip when you
+          have receipts, and as plain .json when you do not. Restore takes either.
         </p>
       </Card>
 

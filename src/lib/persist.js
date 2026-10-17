@@ -288,6 +288,18 @@ export async function storageStatus() {
 
 /* ─────────────────────────────── Read ─────────────────────────────── */
 
+/**
+ * What the mirror holds when the whole state no longer fits in localStorage
+ * (about 5MB in Safari, counted in UTF-16 — roughly 15,000 entries).
+ *
+ * Leaving the last copy that did fit is the dangerous option. It would be read
+ * at every start-up as if it were current, and an edit made before IndexedDB
+ * answered would be stamped newer than everything since and overwrite it. The
+ * marker says "the real copy is in IndexedDB; wait for it" instead.
+ */
+const TOO_LARGE = 'too-large';
+export const isMirrorMarker = (raw) => raw?.mirror === TOO_LARGE;
+
 /** Synchronous read of the mirror, used for the very first render. */
 export function loadSync() {
   try {
@@ -312,6 +324,7 @@ export async function load() {
     /* fall through to the mirror */
   }
 
+  if (isMirrorMarker(mirror)) return primary;
   if (!primary) return mirror;
   if (!mirror) return primary;
   return (primary.savedAt || 0) >= (mirror.savedAt || 0) ? primary : mirror;
@@ -394,7 +407,14 @@ export function save(state, { immediate = false } = {}) {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(payload));
     } catch {
-      /* quota exceeded; IndexedDB below is the larger store anyway */
+      // Over quota: IndexedDB below is the larger store. Replace the mirror with
+      // a marker rather than leave a stale copy behind (see TOO_LARGE). The
+      // theme rides along so the wait for IndexedDB is the right colour.
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ mirror: TOO_LARGE, savedAt: payload.savedAt, theme: payload.theme }));
+      } catch {
+        try { localStorage.removeItem(LS_KEY); } catch { /* storage is unusable; IndexedDB still has it */ }
+      }
     }
 
     idbSet(STATE_KEY, payload).catch(() => {});
