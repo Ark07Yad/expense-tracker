@@ -11,6 +11,13 @@ import { go, logEntry, settledState, startEmpty, startWithSampleData, watchForEr
  * installed, an attachment that vanished.
  */
 
+/** Families of every font face the page has actually loaded. */
+const loadedFonts = (page) =>
+  page.evaluate(async () => {
+    await document.fonts.ready;
+    return [...new Set([...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/["']/g, '')))];
+  });
+
 test.describe('offline', () => {
   test('registers a service worker and takes control of the page', async ({ page }) => {
     await startWithSampleData(page);
@@ -59,7 +66,26 @@ test.describe('offline', () => {
     await go(page, 'Ledger');
     await expect(page.locator('main')).toContainText(/entries|entry/);
 
+    // So is the type: the fonts are bundled assets, not a Google request that
+    // fails offline and drops the page to system sans.
+    expect(await loadedFonts(page)).toEqual(expect.arrayContaining(['Geist Variable', 'Instrument Serif']));
+
     await context.setOffline(false);
+  });
+
+  test('fetches its fonts from this site, never a font CDN', async ({ page }) => {
+    const fontRequests = [];
+    page.on('request', (r) => {
+      if (r.resourceType() === 'font' || /fonts\.(googleapis|gstatic)\.com/.test(r.url())) fontRequests.push(new URL(r.url()));
+    });
+    await startWithSampleData(page);
+    expect(await loadedFonts(page)).toEqual(expect.arrayContaining(['Geist Variable', 'Instrument Serif']));
+
+    expect(fontRequests.length).toBeGreaterThan(0);
+    for (const url of fontRequests) {
+      expect(url.origin, url.href).toBe(new URL(page.url()).origin);
+      expect(url.pathname, url.href).toMatch(/^\/assets\/.+\.woff2$/);
+    }
   });
 
   test('is installable', async ({ page }) => {
@@ -71,6 +97,15 @@ test.describe('offline', () => {
     expect(manifest).toMatchObject({ short_name: 'CoinTrack', display: 'standalone' });
     expect(manifest.icons.length).toBeGreaterThan(0);
     expect(manifest.start_url).toBe('/');
+
+    // Every icon the manifest and the page point to is really served, as the
+    // type it claims. Install prompts fall back silently when one 404s.
+    const icons = [...manifest.icons, { src: '/apple-touch-icon.png', type: 'image/png' }, { src: '/icon.svg', type: 'image/svg+xml' }];
+    for (const icon of icons) {
+      const res = await page.request.get(icon.src);
+      expect(res.status(), icon.src).toBe(200);
+      expect(res.headers()['content-type'], icon.src).toContain(icon.type);
+    }
   });
 });
 

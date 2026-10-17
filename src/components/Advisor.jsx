@@ -68,7 +68,7 @@ export default function Advisor({ section, setSection, onNavigate, toast }) {
                 onClick={() => setSection(s.id)}
                 className={`flex items-start gap-3 p-3 rounded-2xl text-left border transition-all active:scale-[0.99]
                   ${active
-                    ? 'bg-brand-500/14 border-brand-400/40'
+                    ? '[background:var(--surface-hover)] border-[color:var(--text)]'
                     : 'surface border-hair hover:[background:var(--surface-hover)]'}`}
               >
                 <span className={`size-8 rounded-xl grid place-items-center shrink-0 ${active ? 'text-brandy' : 'text-faint'}`}
@@ -77,7 +77,8 @@ export default function Advisor({ section, setSection, onNavigate, toast }) {
                 </span>
                 <span className="min-w-0">
                   <span className={`block text-[13.5px] font-medium ${active ? 'text-brandy' : ''}`}>{s.label}</span>
-                  <span className="block text-[11.5px] text-faint leading-snug mt-0.5">{s.blurb}</span>
+                  {/* Faint drops below 4.5:1 on the active tile's tint; dim holds it. */}
+                  <span className={`block text-[11.5px] leading-snug mt-0.5 ${active ? 'text-dim' : 'text-faint'}`}>{s.blurb}</span>
                 </span>
               </button>
             );

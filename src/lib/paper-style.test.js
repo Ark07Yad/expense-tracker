@@ -66,3 +66,33 @@ describe('the stylesheet has no colour from an earlier design', () => {
     }
   });
 });
+
+describe('the icons and page shell match Paper too', () => {
+  const site = join(root, '..');
+  const shell = ['index.html', 'public/icon.svg', 'public/icon-maskable.svg', 'public/manifest.webmanifest']
+    .map((rel) => ({ rel, text: readFileSync(join(site, rel), 'utf8').toLowerCase() }));
+
+  it('carry none of the old violet icon colours', () => {
+    for (const { rel, text } of shell) {
+      for (const old of ['#8e6bff', '%238e6bff', '#5f2fd0', '#b79bff', '#120a26', 'lineargradient']) {
+        expect(text.includes(old), `${rel} still contains ${old}`).toBe(false);
+      }
+    }
+  });
+
+  it('draw the icons in ink on ivory', () => {
+    for (const rel of ['public/icon.svg', 'public/icon-maskable.svg']) {
+      const text = shell.find((f) => f.rel === rel).text;
+      expect(text, rel).toContain('fill="#f5f2ec"');
+      expect(text, rel).toContain('stroke="#1d1c1a"');
+    }
+  });
+
+  it('list a PNG for every place an SVG icon is not enough', () => {
+    const manifest = JSON.parse(shell.find((f) => f.rel === 'public/manifest.webmanifest').text);
+    const pngs = manifest.icons.filter((i) => i.type === 'image/png');
+    expect(pngs.map((i) => `${i.sizes} ${i.purpose}`)).toEqual(['192x192 any', '512x512 any', '512x512 maskable']);
+    for (const { src } of pngs) expect(readdirSync(join(site, 'public'))).toContain(src.slice(1));
+    expect(shell[0].text).toContain('href="/apple-touch-icon.png"');
+  });
+});

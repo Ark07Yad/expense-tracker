@@ -25,6 +25,12 @@ describe('content security policy', () => {
     expect(directive('script-src')).toEqual(["'self'"]);
   });
 
+  it('loads fonts and styles from this site only, with no font CDN', () => {
+    expect(directive('font-src')).toEqual(["'self'"]);
+    expect(directive('style-src')).toEqual(["'self'", "'unsafe-inline'"]);
+    expect(csp).not.toMatch(/fonts\.googleapis|fonts\.gstatic/);
+  });
+
   it('does not upgrade local model URLs to https', () => {
     expect(csp).not.toMatch(/upgrade-insecure-requests/);
   });

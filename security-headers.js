@@ -42,12 +42,12 @@ export function securityHeaders() {
     'Content-Security-Policy': [
       "default-src 'self'",
       "script-src 'self'",
-      // Google Fonts serves the stylesheet from googleapis and the font files
-      // from gstatic; both are needed or the type falls back to system sans.
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
-      // data: for the inline SVG favicon, blob: for the JSON backup export.
-      "img-src 'self' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      // Fonts are bundled into /assets/ (see main.jsx), so nothing is fetched
+      // from a font CDN.
+      "font-src 'self'",
+      // blob: for the JSON backup export. The favicon is a file now, not data:.
+      "img-src 'self' blob:",
       [
         "connect-src 'self'",
         'https://openrouter.ai',

@@ -183,13 +183,13 @@ export default function AiAdvisor({ topic = 'investing', onClose }) {
                   aria-pressed={active}
                   onClick={() => update({ provider: p.id })}
                   className={`text-left rounded-2xl p-3 border transition-all active:scale-[0.99]
-                    ${active ? 'bg-brand-500/14 border-brand-400/40' : 'surface border-hair hover:[background:var(--surface-hover)]'}`}
+                    ${active ? '[background:var(--surface-hover)] border-[color:var(--text)]' : 'surface border-hair hover:[background:var(--surface-hover)]'}`}
                 >
                   <span className="flex items-center gap-2">
                     <span className={`text-[13.5px] font-semibold ${active ? 'text-brandy' : ''}`}>{p.label}</span>
                     {p.local ? <Badge tone="good">Private</Badge> : p.free ? <Badge tone="good">Free</Badge> : <Badge tone="neutral">Your key</Badge>}
                   </span>
-                  <span className="block text-[11.5px] text-faint leading-snug mt-1">{p.tagline}</span>
+                  <span className={`block text-[11.5px] leading-snug mt-1 ${active ? 'text-dim' : 'text-faint'}`}>{p.tagline}</span>
                 </button>
               );
             })}

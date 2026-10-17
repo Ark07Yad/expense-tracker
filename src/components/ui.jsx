@@ -923,15 +923,15 @@ export function Badge({ tone = 'neutral', children, className = '' }) {
     /* Tinted from the theme's own tones, so a badge sits in the same muted
        palette as the charts instead of being the last neon on the page. Written
        out in full: Tailwind cannot see a class name assembled at runtime. */
-    good: 'bg-[color-mix(in_srgb,var(--tone-good)_12%,transparent)] text-good border-[color-mix(in_srgb,var(--tone-good)_32%,transparent)]',
-    warn: 'bg-[color-mix(in_srgb,var(--tone-warn)_12%,transparent)] text-warn border-[color-mix(in_srgb,var(--tone-warn)_32%,transparent)]',
-    bad: 'bg-[color-mix(in_srgb,var(--tone-bad)_12%,transparent)] text-bad border-[color-mix(in_srgb,var(--tone-bad)_32%,transparent)]',
-    info: 'bg-[color-mix(in_srgb,var(--tone-info)_12%,transparent)] text-info border-[color-mix(in_srgb,var(--tone-info)_32%,transparent)]',
+    good: 'bg-[color-mix(in_srgb,var(--tone-good)_8%,transparent)] text-good border-[color-mix(in_srgb,var(--tone-good)_32%,transparent)]',
+    warn: 'bg-[color-mix(in_srgb,var(--tone-warn)_8%,transparent)] text-warn border-[color-mix(in_srgb,var(--tone-warn)_32%,transparent)]',
+    bad: 'bg-[color-mix(in_srgb,var(--tone-bad)_8%,transparent)] text-bad border-[color-mix(in_srgb,var(--tone-bad)_32%,transparent)]',
+    info: 'bg-[color-mix(in_srgb,var(--tone-info)_8%,transparent)] text-info border-[color-mix(in_srgb,var(--tone-info)_32%,transparent)]',
     brand: 'bg-[color-mix(in_srgb,var(--tone-brand)_10%,transparent)] text-brandy border-[color-mix(in_srgb,var(--tone-brand)_28%,transparent)]',
-    earn: 'bg-[color-mix(in_srgb,var(--tone-earn)_12%,transparent)] text-earn border-[color-mix(in_srgb,var(--tone-earn)_32%,transparent)]',
-    spend: 'bg-[color-mix(in_srgb,var(--tone-spend)_12%,transparent)] text-spend border-[color-mix(in_srgb,var(--tone-spend)_32%,transparent)]',
-    save: 'bg-[color-mix(in_srgb,var(--tone-save)_12%,transparent)] text-save border-[color-mix(in_srgb,var(--tone-save)_32%,transparent)]',
-    invest: 'bg-[color-mix(in_srgb,var(--tone-invest)_12%,transparent)] text-invest border-[color-mix(in_srgb,var(--tone-invest)_32%,transparent)]',
+    earn: 'bg-[color-mix(in_srgb,var(--tone-earn)_8%,transparent)] text-earn border-[color-mix(in_srgb,var(--tone-earn)_32%,transparent)]',
+    spend: 'bg-[color-mix(in_srgb,var(--tone-spend)_8%,transparent)] text-spend border-[color-mix(in_srgb,var(--tone-spend)_32%,transparent)]',
+    save: 'bg-[color-mix(in_srgb,var(--tone-save)_8%,transparent)] text-save border-[color-mix(in_srgb,var(--tone-save)_32%,transparent)]',
+    invest: 'bg-[color-mix(in_srgb,var(--tone-invest)_8%,transparent)] text-invest border-[color-mix(in_srgb,var(--tone-invest)_32%,transparent)]',
   };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${tones[tone]} ${className}`}>

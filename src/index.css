@@ -8,7 +8,7 @@
   /* Paper: an editorial pairing. Geist carries the interface — labels,
      buttons, body copy — and Instrument Serif carries what you read the page
      for: the figures and the section headings. Two voices, each with one job. */
-  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
 
   /* The accent is ink. On paper it is near-black, on the dark page it is
