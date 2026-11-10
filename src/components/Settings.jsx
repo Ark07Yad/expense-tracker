@@ -14,6 +14,7 @@ import { formatMoney, formatPercent, todayKey } from '../lib/calc';
 import { formatBytes } from '../lib/attachments';
 import { buildBackup, readBackup } from '../lib/backup';
 import * as persist from '../lib/persist';
+import { isArcLinkOn, setArcLink, onArcLink } from '../lib/arcLink';
 import ImportSheet from './ImportSheet';
 import SectionTips from './SectionTips';
 
@@ -22,6 +23,45 @@ const AiAdvisor = lazy(() => import('./AiAdvisor'));
 import {
   Badge, Bar, Button, Card, ConfirmButton, Empty, Field, Icon, Input, Money, MoneyInput, NumberInput, PageHeader, SectionTitle, Select, Sheet,
 } from './ui';
+
+/**
+ * Link to ARC — the owner's personal dashboard on the same Mac. Opt-in and
+ * per browser; see lib/arcLink.js for exactly what is sent.
+ */
+function ArcLink({ state }) {
+  const [on, setOn] = useState(isArcLinkOn);
+  const [status, setStatus] = useState({ state: 'off', at: null });
+  useEffect(() => onArcLink(setStatus), []);
+  const label = {
+    off: 'Off',
+    waiting: 'On — waiting for the next change',
+    sending: 'Sending…',
+    ok: `Synced ${status.at ? new Date(status.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`,
+    offline: 'ARC isn’t running — it catches up on your next change',
+    refused: 'ARC refused the update — check ARC’s allowed origins',
+  }[status.state];
+  return (
+    <div className="surface rounded-2xl p-3.5 mt-4 flex flex-wrap items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium">Link to ARC</div>
+        <div className="text-[11.5px] text-faint mt-0.5">
+          Sends entries, budgets, holdings, debts and goals to ARC on this computer whenever they change — never notes or receipts. {on && <span>Status: {label}.</span>}
+        </div>
+      </div>
+      <Button
+        variant={on ? 'primary' : 'ghost'}
+        size="sm"
+        aria-pressed={on}
+        onClick={() => {
+          setArcLink(!on, state);
+          setOn(!on);
+        }}
+      >
+        {on ? 'Linked' : 'Link to ARC'}
+      </Button>
+    </div>
+  );
+}
 
 export default function Settings({ toast, onNavigate }) {
   const { state, dispatch } = useStore();
@@ -396,6 +436,8 @@ export default function Settings({ toast, onNavigate }) {
             Erase everything
           </Button>
         </div>
+
+        <ArcLink state={state} />
 
         <p className="text-[11.5px] text-faint mt-3 leading-relaxed">
           Loading sample data replaces every entry and holding you currently have. Export first if you want to

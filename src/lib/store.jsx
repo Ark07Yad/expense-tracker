@@ -11,6 +11,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useS
 import { categoriesFor } from './data';
 import { monthKey, todayKey } from './calc';
 import * as persist from './persist';
+import { scheduleArcSync } from './arcLink';
 import { referencedIds } from './attachments';
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
@@ -686,6 +687,7 @@ export function StoreProvider({ children }) {
       return;
     }
     persist.save(state);
+    scheduleArcSync(state); // opt-in live link to ARC; a no-op unless turned on in Settings
   }, [state]);
 
   /*
